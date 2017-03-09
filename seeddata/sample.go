@@ -3,7 +3,6 @@ package seeddata
 import (
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
-	"log"
 	"time"
 )
 
@@ -27,18 +26,11 @@ type User struct {
 
 // connect is here
 func connect() *mgo.Session {
-	acmWebSession, err := mgo.DialWithTimeout("192.168.1.11:2700/acm-web", 2*time.Second)
-	if err != nil {
-		log.Fatalf("failed to connect to mongodb: %q", err)
-	}
+	acmWebSession, _ := mgo.DialWithTimeout("192.168.1.11:2700/acm-web", 2*time.Second)
 	return acmWebSession
 }
 func findByName(name string) {
 	var ret []Company
 	testCollection := connect().DB("acm-web").C("acm_company")
 	testCollection.Find(bson.M{"name": 1}).All(&ret)
-}
-
-func do() {
-	findByName("diego")
 }

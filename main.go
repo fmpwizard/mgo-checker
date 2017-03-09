@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"go/ast"
 	"go/doc"
+	"go/importer"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"io"
+	"log"
 	"os"
-	//"path/filepath"
+	//"reflect"
 	"strings"
 )
 
@@ -34,7 +37,114 @@ type Field struct {
 
 var appInfo AppInfo
 
+var kPath = "./seeddata"
+var report = false
+var fset *token.FileSet
+
 func main() {
+	fset = token.NewFileSet()
+
+	pkgs, e := parser.ParseDir(fset, kPath, nil, parser.ParseComments)
+	//pkgs, e := parser.ParseDir(fset, kPath, nil, parser.ParseComments)
+	if e != nil {
+		log.Fatal(e)
+		return
+	}
+
+	astf := make([]*ast.File, 0)
+	for _, pkg := range pkgs {
+
+		fmt.Printf("package %v\n", pkg.Name)
+		for fn, f := range pkg.Files {
+			fmt.Printf("file %v\n", fn)
+			astf = append(astf, f)
+		}
+	}
+
+	config := &types.Config{
+		Error: func(e error) {
+			fmt.Println(e)
+		},
+		Importer: importer.Default(),
+	}
+	info := types.Info{
+		Types: make(map[ast.Expr]types.TypeAndValue),
+		Defs:  make(map[*ast.Ident]types.Object),
+		Uses:  make(map[*ast.Ident]types.Object),
+	}
+	pkg, e := config.Check(kPath, fset, astf, &info)
+	if e != nil {
+		fmt.Println(e)
+	}
+	fmt.Printf("types.Config.Check got %v\n", pkg.String())
+	//for _, pkg := range pkgs {
+	//getDocs(pkg)
+	//}
+	for _, f := range astf {
+		ast.Walk(&PrintASTVisitor{&info}, f)
+	}
+
+}
+
+func getDocs(pkg *ast.Package) {
+	p := doc.New(pkg, "./", 0)
+	for _, t := range p.Types {
+		//fmt.Println("  type", t.Name)
+		//fmt.Printf("    docs:\n%v", t.Doc)
+		if isMgoStruct(t.Doc) {
+			m := getMgoCollName(t.Doc)
+			fmt.Printf("collection name: %s\n", m)
+		}
+	}
+	fmt.Println("step ======================= step")
+
+}
+
+type PrintASTVisitor struct {
+	info *types.Info
+}
+
+func (v *PrintASTVisitor) Visit(node ast.Node) ast.Visitor {
+	fmt.Println("++++++++++++++++++++++++++++++++")
+	if node != nil {
+		//fmt.Printf("%s", reflect.TypeOf(node).String())
+
+		switch n := node.(type) {
+		case *ast.CommentGroup:
+			fmt.Printf("comment: %+v\n", n.Text())
+		case *ast.Ident:
+			//fmt.Printf(" : %+v", fset.Position(node.Pos()))
+			//fmt.Printf("-------------------------------here: %+v\n", n.Name)
+			t := v.info.TypeOf(node.(ast.Expr))
+			fmt.Printf("--------------------- Name : %s\n", n.Name)
+			if t != nil {
+				if t.String() == "*gopkg.in/mgo.v2.Collection" {
+					fmt.Printf(" : %+v", fset.Position(node.Pos()))
+					fmt.Printf("---------------------Found collections! : %s\n", t.String())
+					report = true
+				}
+				//report = false
+			}
+			//report = false
+
+		case ast.Expr:
+			if report {
+				fmt.Printf("%+v", fset.Position(node.Pos()))
+				t := v.info.TypeOf(node.(ast.Expr))
+				if t != nil {
+					fmt.Printf(" Expr: %s\n", t.String())
+				}
+			} else {
+				fmt.Printf("report: %v, type: %+v\n", report, n)
+			}
+		default:
+			fmt.Printf("report: %v, type: %+v\n", report, n)
+		}
+	}
+	return v
+}
+
+func main1() {
 	//filepath.Walk("./seeddata", walk)
 	//fmt.Println("=============")
 	docs()
