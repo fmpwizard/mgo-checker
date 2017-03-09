@@ -6,16 +6,52 @@ import (
 	"fmt"
 	"go/ast"
 	"go/doc"
-	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
 	"io"
-	"log"
 	"os"
-	//"reflect"
 	"strings"
 )
+
+var src = `
+package seeddata
+
+import (
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
+	"time"
+)
+
+// Company represents a Company document in mongodb
+// mgo:model:xyz_company
+type Company struct {
+	// Name the company name
+	Name string ` + "`bson:\"name\"`" + `
+	// Zip the company name
+	Zip string ` + "`bson:\"zip_code\"`" + `
+}
+
+// User represents a user document in mongodb
+// mgo:model:xyz_users
+type User struct {
+	// Name the user name
+	Name string ` + "`bson:\"name\"`" + `
+	// Email the uer's email
+	Email string ` + "`bson:\"email\"`" + `
+}
+
+// connect is here
+func connect() *mgo.Session {
+	xyzWebSession, _ := mgo.DialWithTimeout("127.0.0.1:2700/dbname", 2*time.Second)
+	return xyzWebSession
+}
+func findByName(name string) {
+	var ret []Company
+	testCollection := connect().DB("dbname").C("xyz_company")
+	testCollection.Find(bson.M{"name": 1}).All(&ret)
+}
+`
 
 // AppInfo holds all the models we collected
 type AppInfo struct {
@@ -44,45 +80,59 @@ var fset *token.FileSet
 func main() {
 	fset = token.NewFileSet()
 
-	pkgs, e := parser.ParseDir(fset, kPath, nil, parser.ParseComments)
-	//pkgs, e := parser.ParseDir(fset, kPath, nil, parser.ParseComments)
-	if e != nil {
-		log.Fatal(e)
-		return
-	}
-
-	astf := make([]*ast.File, 0)
-	for _, pkg := range pkgs {
-
-		fmt.Printf("package %v\n", pkg.Name)
-		for fn, f := range pkg.Files {
-			fmt.Printf("file %v\n", fn)
-			astf = append(astf, f)
+	/*
+		pkgs, e := parser.ParseDir(fset, kPath, nil, parser.ParseComments)
+		if e != nil {
+			log.Fatal(e)
+			return
 		}
-	}
 
-	config := &types.Config{
-		Error: func(e error) {
-			fmt.Println(e)
-		},
-		Importer: importer.Default(),
-	}
+		astf := make([]*ast.File, 0)
+		for _, pkg := range pkgs {
+
+			fmt.Printf("package %v\n", pkg.Name)
+			for fn, f := range pkg.Files {
+				fmt.Printf("file %v\n", fn)
+				astf = append(astf, f)
+			}
+		}
+	*/
+
+	/*
+		config := &types.Config{
+			Error: func(e error) {
+				fmt.Println(e)
+			},
+			Importer: importer.Default(),
+		}
+	*/
 	info := types.Info{
 		Types: make(map[ast.Expr]types.TypeAndValue),
 		Defs:  make(map[*ast.Ident]types.Object),
 		Uses:  make(map[*ast.Ident]types.Object),
 	}
-	pkg, e := config.Check(kPath, fset, astf, &info)
-	if e != nil {
-		fmt.Println(e)
-	}
-	fmt.Printf("types.Config.Check got %v\n", pkg.String())
+	/*
+		pkg, e := config.Check(kPath, fset, astf, &info)
+		if e != nil {
+			fmt.Println(e)
+		}
+		fmt.Printf("types.Config.Check got %v\n", pkg.String())
+	*/
 	//for _, pkg := range pkgs {
 	//getDocs(pkg)
 	//}
-	for _, f := range astf {
-		ast.Walk(&PrintASTVisitor{&info}, f)
+
+	f, err := parser.ParseFile(fset, "sample.go", src, parser.ParseComments)
+	if err != nil {
+		fmt.Println("failed to parse file ", err)
 	}
+	ast.Walk(&PrintASTVisitor{&info}, f)
+
+	/*
+		for _, f := range astf {
+			ast.Walk(&PrintASTVisitor{&info}, f)
+		}
+	*/
 
 }
 
@@ -121,6 +171,7 @@ func (v *PrintASTVisitor) Visit(node ast.Node) ast.Visitor {
 				if t.String() == "*gopkg.in/mgo.v2.Collection" {
 					fmt.Printf(" : %+v", fset.Position(node.Pos()))
 					fmt.Printf("---------------------Found collections! : %s\n", t.String())
+					fmt.Printf("---------------------node fields: : %+v\n", n)
 					report = true
 				}
 				//report = false

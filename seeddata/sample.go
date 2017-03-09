@@ -7,7 +7,7 @@ import (
 )
 
 // Company represents a Company document in mongodb
-// mgo:model:acm_company
+// mgo:model:xyz_company
 type Company struct {
 	// Name the company name
 	Name string `bson:"name"`
@@ -16,7 +16,7 @@ type Company struct {
 }
 
 // User represents a user document in mongodb
-// mgo:model:acm_users
+// mgo:model:xyz_users
 type User struct {
 	// Name the user name
 	Name string `bson:"name"`
@@ -26,11 +26,11 @@ type User struct {
 
 // connect is here
 func connect() *mgo.Session {
-	acmWebSession, _ := mgo.DialWithTimeout("192.168.1.11:2700/acm-web", 2*time.Second)
-	return acmWebSession
+	xyzWebSession, _ := mgo.DialWithTimeout("127.0.0.1:2700/dbname", 2*time.Second)
+	return xyzWebSession
 }
 func findByName(name string) {
 	var ret []Company
-	testCollection := connect().DB("acm-web").C("acm_company")
+	testCollection := connect().DB("dbname").C("xyz_company")
 	testCollection.Find(bson.M{"name": 1}).All(&ret)
 }
