@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"reflect"
 )
 
 var src = `
@@ -47,66 +48,75 @@ func findByName(name string) {
 }
 `
 
-var report = false
 var fset *token.FileSet
+var info = types.Info{
+	Types: make(map[ast.Expr]types.TypeAndValue),
+	Defs:  make(map[*ast.Ident]types.Object),
+	Uses:  make(map[*ast.Ident]types.Object),
+}
 
 func main() {
 	fset = token.NewFileSet()
 
-	info := types.Info{
-		Types: make(map[ast.Expr]types.TypeAndValue),
-		Defs:  make(map[*ast.Ident]types.Object),
-		Uses:  make(map[*ast.Ident]types.Object),
-	}
-
-	f, err := parser.ParseFile(fset, "sample.go", src, parser.ParseComments)
+	f, err := parser.ParseFile(fset, "./seeddata/sample.go", nil, parser.ParseComments)
 	if err != nil {
 		fmt.Println("failed to parse file ", err)
 	}
-	ast.Walk(&PrintASTVisitor{&info}, f)
+	ast.Walk(&printASTVisitor{&info}, f)
 }
 
-type PrintASTVisitor struct {
+type printASTVisitor struct {
 	info *types.Info
 }
 
-func (v *PrintASTVisitor) Visit(node ast.Node) ast.Visitor {
-	fmt.Println("++++++++++++++++++++++++++++++++")
+func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 	if node != nil {
-		//fmt.Printf("%s", reflect.TypeOf(node).String())
-
+		pos := fset.Position(node.Pos())
+		fmt.Printf("%s: %s", pos, reflect.TypeOf(node).String())
 		switch n := node.(type) {
-		case *ast.CommentGroup:
-			fmt.Printf("comment: %+v\n", n.Text())
-		case *ast.Ident:
-			//fmt.Printf(" : %+v", fset.Position(node.Pos()))
-			//fmt.Printf("-------------------------------here: %+v\n", n.Name)
-			t := v.info.TypeOf(node.(ast.Expr))
-			fmt.Printf("--------------------- Name : %s\n", n.Name)
-			if t != nil {
-				if t.String() == "*gopkg.in/mgo.v2.Collection" {
-					fmt.Printf(" : %+v", fset.Position(node.Pos()))
-					fmt.Printf("---------------------Found collections! : %s\n", t.String())
-					fmt.Printf("---------------------node fields: : %+v\n", n)
-					report = true
-				}
-				//report = false
+		case *ast.AssignStmt:
+			for _, x := range n.Rhs {
+				fmt.Println("\ngoing in the right ")
+				details(x)
 			}
-			//report = false
-
+			for _, x := range n.Lhs {
+				fmt.Println("\ngoing in the left ")
+				details(x)
+			}
 		case ast.Expr:
-			if report {
-				fmt.Printf("%+v", fset.Position(node.Pos()))
-				t := v.info.TypeOf(node.(ast.Expr))
-				if t != nil {
-					fmt.Printf(" Expr: %s\n", t.String())
-				}
-			} else {
-				fmt.Printf("report: %v, type: %+v\n", report, n)
+			t := v.info.TypeOf(node.(ast.Expr))
+			if t != nil {
+				fmt.Printf(" : %s", t.String())
 			}
-		default:
-			fmt.Printf("report: %v, type: %+v\n", report, n)
 		}
+		fmt.Println()
 	}
 	return v
+}
+
+func details(node ast.Node) {
+	if node != nil {
+		pos := fset.Position(node.Pos())
+		fmt.Printf("\nThis is is!!1!!!!!!!!!!!!!!!!!!! %s: %s\n", pos, reflect.TypeOf(node).String())
+
+		switch n := node.(type) {
+		case *ast.CallExpr:
+			details(n.Fun)
+			for _, arg := range n.Args {
+				details(arg)
+			}
+			fmt.Println()
+		case *ast.BasicLit:
+			fmt.Printf("\rhs: %+v\n", n.Value)
+		case *ast.SelectorExpr:
+			details(n.Sel)
+		case *ast.Ident:
+			fmt.Printf("ident name: %s\n", n.Name)
+			if n.Obj != nil {
+				fmt.Printf("ident kind %+v\n", n.Obj.Kind)
+				fmt.Printf("ident type %+v\n", n.Obj.Type)
+				fmt.Printf("reflect type: %s\n", reflect.TypeOf(node).String())
+			}
+		}
+	}
 }
