@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -33,7 +34,11 @@ func main() {
 	//fakenews:
 	collFieldTypes[`"xyz_company"."name"`] = "string"
 	collFieldTypes[`"xyz_company"."zip_code"`] = "string"
-	files := initChecker()
+
+	dirPath := flag.String("dir-path", "", "specify the path to the folder with go files to check")
+	flag.Parse()
+
+	files := initChecker(*dirPath)
 	for _, f := range files {
 		ast.Walk(&printASTVisitor{&info}, f)
 		if errorFound != nil {
