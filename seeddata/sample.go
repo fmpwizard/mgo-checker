@@ -31,6 +31,7 @@ func connect() *mgo.Session {
 }
 func findByName(name string) {
 	var ret []Company
-	testCollection := connect().DB("dbname").C("xyz_company")
+	collName := "xyz_company"
+	testCollection := connect().DB("dbname").C(collName)
 	testCollection.Find(bson.M{"name": 1}).All(&ret)
 }

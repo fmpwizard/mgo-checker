@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
@@ -62,6 +63,19 @@ func main() {
 	if err != nil {
 		fmt.Println("failed to parse file ", err)
 	}
+
+	conf := &types.Config{
+		Error: func(e error) {
+			fmt.Println(e)
+		},
+		Importer: importer.Default(),
+	}
+
+	_, err = conf.Check("seeddata", fset, []*ast.File{f}, &info)
+	if err != nil {
+		fmt.Printf("unexpected error: %v", err)
+	}
+	fmt.Println("len ", len(info.Types))
 	ast.Walk(&printASTVisitor{&info}, f)
 }
 
@@ -75,14 +89,17 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 		fmt.Printf("%s: %s", pos, reflect.TypeOf(node).String())
 		switch n := node.(type) {
 		case *ast.AssignStmt:
+			for _, x := range n.Lhs {
+				fmt.Println("\ngoing in the left ")
+				fmt.Printf("type is ========================: %+v\n", info.TypeOf(x.(ast.Expr)))
+				details(x)
+			}
+
 			for _, x := range n.Rhs {
 				fmt.Println("\ngoing in the right ")
 				details(x)
 			}
-			for _, x := range n.Lhs {
-				fmt.Println("\ngoing in the left ")
-				details(x)
-			}
+
 		case ast.Expr:
 			t := v.info.TypeOf(node.(ast.Expr))
 			if t != nil {
@@ -112,10 +129,25 @@ func details(node ast.Node) {
 			details(n.Sel)
 		case *ast.Ident:
 			fmt.Printf("ident name: %s\n", n.Name)
+			fmt.Printf("ident Type: ========================: %+v\n", info.ObjectOf(n).Type().String())
+			fmt.Printf("ident Id: ========================: %+v\n", info.ObjectOf(n).Id())
+			fmt.Printf("ident String: ========================: %+v\n", info.ObjectOf(n).String())
+			if info.ObjectOf(n).Parent() != nil {
+				for _, x := range info.ObjectOf(n).Parent().Names() {
+					//fmt.Printf("ident Parent Name: ========================: %+v\n", x)
+					fmt.Printf("ident Parent Lookup => Type.String(): ========================: %+v\n", info.ObjectOf(n).Parent().Lookup(x).Type().String())
+					fmt.Printf("ident Parent Lookup => Id(): ========================: %+v\n", info.ObjectOf(n).Parent().Lookup(x).Id())
+				}
+				fmt.Printf("ident Parent String: ========================: %+v\n", info.ObjectOf(n).Parent().String())
+			}
+			if info.ObjectOf(n).Type().String() == "func(name string) *gopkg.in/mgo.v2.Collection" {
+				fmt.Printf("found it!!!!!!!!!!!!!!!\n")
+			}
 			if n.Obj != nil {
 				fmt.Printf("ident kind %+v\n", n.Obj.Kind)
 				fmt.Printf("ident type %+v\n", n.Obj.Type)
 				fmt.Printf("reflect type: %s\n", reflect.TypeOf(node).String())
+				fmt.Printf("type is: %+v\n", info.TypeOf(node.(ast.Expr)))
 			}
 		}
 	}
