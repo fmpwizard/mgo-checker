@@ -92,12 +92,16 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 			for _, x := range n.Lhs {
 				fmt.Println("\ngoing in the left ")
 				fmt.Printf("type is ========================: %+v\n", info.TypeOf(x.(ast.Expr)))
-				details(x)
+				if info.TypeOf(x.(ast.Expr)).String() == "*gopkg.in/mgo.v2.Collection" {
+					details(x)
+				}
 			}
 
 			for _, x := range n.Rhs {
 				fmt.Println("\ngoing in the right ")
-				details(x)
+				if info.TypeOf(x.(ast.Expr)).String() == "*gopkg.in/mgo.v2.Collection" {
+					details(x)
+				}
 			}
 
 		case ast.Expr:
@@ -128,18 +132,19 @@ func details(node ast.Node) {
 		case *ast.SelectorExpr:
 			details(n.Sel)
 		case *ast.Ident:
-			fmt.Printf("ident name: %s\n", n.Name)
 			fmt.Printf("ident Type: ========================: %+v\n", info.ObjectOf(n).Type().String())
 			fmt.Printf("ident Id: ========================: %+v\n", info.ObjectOf(n).Id())
-			fmt.Printf("ident String: ========================: %+v\n", info.ObjectOf(n).String())
-			if info.ObjectOf(n).Parent() != nil {
-				for _, x := range info.ObjectOf(n).Parent().Names() {
-					//fmt.Printf("ident Parent Name: ========================: %+v\n", x)
-					fmt.Printf("ident Parent Lookup => Type.String(): ========================: %+v\n", info.ObjectOf(n).Parent().Lookup(x).Type().String())
-					fmt.Printf("ident Parent Lookup => Id(): ========================: %+v\n", info.ObjectOf(n).Parent().Lookup(x).Id())
+			//fmt.Printf("ident String: ========================: %+v\n", info.ObjectOf(n).String())
+			/*
+				if info.ObjectOf(n).Parent() != nil {
+					for _, x := range info.ObjectOf(n).Parent().Names() {
+						//fmt.Printf("ident Parent Name: ========================: %+v\n", x)
+						fmt.Printf("ident Parent Lookup => Type.String(): ========================: %+v\n", info.ObjectOf(n).Parent().Lookup(x).Type().String())
+						fmt.Printf("ident Parent Lookup => Id(): ========================: %+v\n", info.ObjectOf(n).Parent().Lookup(x).Id())
+					}
+					fmt.Printf("ident Parent String: ========================: %+v\n", info.ObjectOf(n).Parent().String())
 				}
-				fmt.Printf("ident Parent String: ========================: %+v\n", info.ObjectOf(n).Parent().String())
-			}
+			*/
 			if info.ObjectOf(n).Type().String() == "func(name string) *gopkg.in/mgo.v2.Collection" {
 				fmt.Printf("found it!!!!!!!!!!!!!!!\n")
 			}
