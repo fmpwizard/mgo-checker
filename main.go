@@ -51,6 +51,8 @@ func findByName(name string) {
 
 //This will need a mutex
 var collectionsMap = make(map[string]string)
+var collectionsVarToNameMap = make(map[string]string)
+var currentKey = ""
 
 var fset *token.FileSet
 var info = types.Info{
@@ -88,6 +90,11 @@ func typeReport() {
 	for k, v := range collectionsMap {
 		fmt.Printf("%s => %s\n", k, v)
 	}
+	fmt.Println("Found these collections:")
+	for k, v := range collectionsVarToNameMap {
+		fmt.Printf("%s => %s\n", k, v)
+	}
+
 }
 
 type printASTVisitor struct {
@@ -102,6 +109,18 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 		switch n := node.(type) {
 		case *ast.Ident:
 			if info.ObjectOf(n) != nil && info.ObjectOf(n).Type().String() == "*gopkg.in/mgo.v2.Collection" {
+				details(n)
+			}
+		case *ast.CallExpr:
+			if info.TypeOf(n.Fun).String() == "func(name string) *gopkg.in/mgo.v2.Collection" {
+				//details(n.Fun)
+				for _, arg := range n.Args {
+					details(arg)
+				}
+			}
+			fmt.Println()
+		case *ast.SelectorExpr:
+			if info.ObjectOf(n.Sel).Type().String() == "func(query interface{}) *gopkg.in/mgo.v2.Query" {
 				details(n)
 			}
 			/*
@@ -146,14 +165,13 @@ func details(node ast.Node) {
 		fmt.Printf("\nThis is is!!1!!!!!!!!!!!!!!!!!!! %s: %s\n", pos, reflect.TypeOf(node).String())
 
 		switch n := node.(type) {
-		case *ast.CallExpr:
-			details(n.Fun)
-			for _, arg := range n.Args {
-				details(arg)
-			}
-			fmt.Println()
+
 		case *ast.BasicLit:
 			fmt.Printf("\rhs: %+v\n", n.Value)
+			if currentKey != "" {
+				collectionsVarToNameMap[currentKey] = n.Value
+				currentKey = ""
+			}
 		case *ast.SelectorExpr:
 			details(n.Sel)
 		case *ast.Ident:
@@ -177,9 +195,7 @@ func details(node ast.Node) {
 			}
 			if n.Obj != nil {
 				collectionsMap[info.ObjectOf(n).Id()] = info.ObjectOf(n).Type().String()
-				fmt.Printf("ident kind %+v\n", n.Obj.Kind)
-				fmt.Printf("ident type %+v\n", n.Obj.Type)
-				fmt.Printf("reflect type: %s\n", reflect.TypeOf(node).String())
+				currentKey = info.ObjectOf(n).Id()
 			}
 		}
 	}
