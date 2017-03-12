@@ -95,16 +95,22 @@ type printASTVisitor struct {
 }
 
 func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
+	//fmt.Println("--------------------------------------------------")
 	if node != nil {
 		pos := fset.Position(node.Pos())
 		fmt.Printf("%s: %s", pos, reflect.TypeOf(node).String())
 		switch n := node.(type) {
 		case *ast.Ident:
-
 			if info.ObjectOf(n) != nil && info.ObjectOf(n).Type().String() == "*gopkg.in/mgo.v2.Collection" {
 				details(n)
 			}
-
+			/*
+				case *ast.SelectorExpr:
+					if info.ObjectOf(n.Sel).Type().String() == "func(name string) *gopkg.in/mgo.v2.Collection" {
+						fmt.Println("wwwwwwwwwwwwwwwwwwwwwwwww")
+						details(n)
+					}
+			*/
 		/*
 			case *ast.AssignStmt:
 					for _, x := range n.Lhs {
@@ -134,7 +140,7 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 }
 
 func details(node ast.Node) {
-	fmt.Println("--------------------------------------------------")
+	fmt.Println("\n--------------------------------------------------")
 	if node != nil {
 		pos := fset.Position(node.Pos())
 		fmt.Printf("\nThis is is!!1!!!!!!!!!!!!!!!!!!! %s: %s\n", pos, reflect.TypeOf(node).String())
@@ -152,7 +158,7 @@ func details(node ast.Node) {
 			details(n.Sel)
 		case *ast.Ident:
 			fmt.Printf("ident Type: ========================: %+v\n", info.ObjectOf(n).Type().String())
-			fmt.Printf("ident Id: ========================: %+v\n", info.ObjectOf(n).Id())
+			fmt.Printf("ident Id: ========================: %+v\n", info.ObjectOf(n).Id()) //NAme and Id are the same
 
 			//fmt.Printf("ident String: ========================: %+v\n", info.ObjectOf(n).String())
 			/*
@@ -167,6 +173,7 @@ func details(node ast.Node) {
 			*/
 			if info.ObjectOf(n).Type().String() == "func(name string) *gopkg.in/mgo.v2.Collection" {
 				fmt.Printf("found it!!!!!!!!!!!!!!!\n")
+
 			}
 			if n.Obj != nil {
 				collectionsMap[info.ObjectOf(n).Id()] = info.ObjectOf(n).Type().String()
