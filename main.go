@@ -49,6 +49,9 @@ func findByName(name string) {
 }
 `
 
+//This will need a mutex
+var collectionsMap = make(map[string]string)
+
 var fset *token.FileSet
 var info = types.Info{
 	Types: make(map[ast.Expr]types.TypeAndValue),
@@ -77,6 +80,14 @@ func main() {
 	}
 	fmt.Println("len ", len(info.Types))
 	ast.Walk(&printASTVisitor{&info}, f)
+	typeReport()
+}
+
+func typeReport() {
+	fmt.Println("Found these variables:")
+	for k, v := range collectionsMap {
+		fmt.Printf("%s => %s\n", k, v)
+	}
 }
 
 type printASTVisitor struct {
@@ -116,6 +127,7 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 }
 
 func details(node ast.Node) {
+	fmt.Println("--------------------------------------------------")
 	if node != nil {
 		pos := fset.Position(node.Pos())
 		fmt.Printf("\nThis is is!!1!!!!!!!!!!!!!!!!!!! %s: %s\n", pos, reflect.TypeOf(node).String())
@@ -134,6 +146,7 @@ func details(node ast.Node) {
 		case *ast.Ident:
 			fmt.Printf("ident Type: ========================: %+v\n", info.ObjectOf(n).Type().String())
 			fmt.Printf("ident Id: ========================: %+v\n", info.ObjectOf(n).Id())
+
 			//fmt.Printf("ident String: ========================: %+v\n", info.ObjectOf(n).String())
 			/*
 				if info.ObjectOf(n).Parent() != nil {
@@ -149,10 +162,10 @@ func details(node ast.Node) {
 				fmt.Printf("found it!!!!!!!!!!!!!!!\n")
 			}
 			if n.Obj != nil {
+				collectionsMap[info.ObjectOf(n).Id()] = info.ObjectOf(n).Type().String()
 				fmt.Printf("ident kind %+v\n", n.Obj.Kind)
 				fmt.Printf("ident type %+v\n", n.Obj.Type)
 				fmt.Printf("reflect type: %s\n", reflect.TypeOf(node).String())
-				fmt.Printf("type is: %+v\n", info.TypeOf(node.(ast.Expr)))
 			}
 		}
 	}
