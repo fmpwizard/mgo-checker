@@ -59,19 +59,18 @@ type ErrTypeInfo struct {
 	Column   int
 }
 
-func (e *ErrTypeInfo) String() string {
+func (e ErrTypeInfo) String() string {
 	if e.Expected == "" {
 		return fmt.Sprintf(
-			"%s:%d:%d: wrong mongodb field name, could not find field: %s\n",
+			"%s:%d:%d: wrong mongodb field name, could not find field: %s",
 			e.Filename,
 			e.Line,
 			e.Column,
 			e.Actual,
 		)
 	}
-
 	return fmt.Sprintf(
-		"%s:%d:%d: wrong 'value' type, expected %s but got %s\n",
+		"%s:%d:%d: wrong 'value' type, expected %s but got %s",
 		e.Filename,
 		e.Line,
 		e.Column,
@@ -125,6 +124,7 @@ func main() {
 	if err != nil {
 		fmt.Printf("unexpected error: %v", err)
 	}
+
 	fmt.Println("len ", len(info.Types))
 	ast.Walk(&printASTVisitor{&info}, f)
 	typeReport()
@@ -135,7 +135,6 @@ type printASTVisitor struct {
 }
 
 func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
-	//fmt.Println("--------------------------------------------------")
 	if node != nil {
 		pos := fset.Position(node.Pos())
 		fmt.Printf("%s: %s", pos, reflect.TypeOf(node).String())
