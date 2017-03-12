@@ -1,12 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
 )
 
-var errorFound ErrTypeInfo
+var errorFound *ErrTypeInfo
 
 //This will need a mutex
 var collectionsMap = make(map[string]string)
@@ -35,6 +36,9 @@ func main() {
 	files := initChecker()
 	for _, f := range files {
 		ast.Walk(&printASTVisitor{&info}, f)
+		if errorFound != nil {
+			fmt.Println(errorFound)
+		}
 	}
 	typeReport()
 }
