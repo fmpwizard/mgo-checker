@@ -99,22 +99,29 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 		pos := fset.Position(node.Pos())
 		fmt.Printf("%s: %s", pos, reflect.TypeOf(node).String())
 		switch n := node.(type) {
-		case *ast.AssignStmt:
-			for _, x := range n.Lhs {
-				fmt.Println("\ngoing in the left ")
-				fmt.Printf("type is ========================: %+v\n", info.TypeOf(x.(ast.Expr)))
-				if info.TypeOf(x.(ast.Expr)).String() == "*gopkg.in/mgo.v2.Collection" {
-					details(x)
-				}
+		case *ast.Ident:
+
+			if info.ObjectOf(n) != nil && info.ObjectOf(n).Type().String() == "*gopkg.in/mgo.v2.Collection" {
+				details(n)
 			}
 
-			for _, x := range n.Rhs {
-				fmt.Println("\ngoing in the right ")
-				if info.TypeOf(x.(ast.Expr)).String() == "*gopkg.in/mgo.v2.Collection" {
-					details(x)
-				}
-			}
+		/*
+			case *ast.AssignStmt:
+					for _, x := range n.Lhs {
+						fmt.Println("\ngoing in the left ")
+						fmt.Printf("type is ========================: %+v\n", info.TypeOf(x.(ast.Expr)))
+						if info.TypeOf(x.(ast.Expr)).String() == "*gopkg.in/mgo.v2.Collection" {
+							details(x)
+						}
+					}
 
+					for _, x := range n.Rhs {
+						fmt.Println("\ngoing in the right ")
+						if info.TypeOf(x.(ast.Expr)).String() == "*gopkg.in/mgo.v2.Collection" {
+							details(x)
+						}
+					}
+		*/
 		case ast.Expr:
 			t := v.info.TypeOf(node.(ast.Expr))
 			if t != nil {
