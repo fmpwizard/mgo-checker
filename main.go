@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"os"
 	"reflect"
 )
 
@@ -49,6 +50,38 @@ func findByName(name string) {
 }
 `
 
+// ErrTypeInfo holds information about the incorrect type parameter found.
+type ErrTypeInfo struct {
+	Expected string
+	Actual   string
+	Filename string
+	Line     int
+	Column   int
+}
+
+func (e *ErrTypeInfo) String() string {
+	if e.Expected == "" {
+		return fmt.Sprintf(
+			"%s:%d:%d: wrong mongodb field name, could not find field: %s\n",
+			e.Filename,
+			e.Line,
+			e.Column,
+			e.Actual,
+		)
+	}
+
+	return fmt.Sprintf(
+		"%s:%d:%d: wrong 'value' type, expected %s but got %s\n",
+		e.Filename,
+		e.Line,
+		e.Column,
+		e.Expected,
+		e.Actual,
+	)
+}
+
+var errorFound ErrTypeInfo
+
 //This will need a mutex
 var collectionsMap = make(map[string]string)
 var collectionsVarToNameMap = make(map[string]string)
@@ -57,21 +90,22 @@ var currentKey = ""
 // "collection.field = string | int | bson.ObjectId"
 var collFieldTypes = make(map[string]string)
 
-var foundQ = false
-var foundM = false
-
 var fset *token.FileSet
+var pckg *types.Package
 var info = types.Info{
-	Types: make(map[ast.Expr]types.TypeAndValue),
-	Defs:  make(map[*ast.Ident]types.Object),
-	Uses:  make(map[*ast.Ident]types.Object),
+	Types:      make(map[ast.Expr]types.TypeAndValue),
+	Defs:       make(map[*ast.Ident]types.Object),
+	Uses:       make(map[*ast.Ident]types.Object),
+	Implicits:  make(map[ast.Node]types.Object),
+	Selections: make(map[*ast.SelectorExpr]*types.Selection),
+	Scopes:     make(map[ast.Node]*types.Scope),
 }
 
 func main() {
 
 	//fakenews:
-	collFieldTypes["xyz_company.name"] = "string"
-	collFieldTypes["xyz_company.zip_code"] = "string"
+	collFieldTypes[`"xyz_company"."name"`] = "string"
+	collFieldTypes[`"xyz_company"."zip_code"`] = "string"
 
 	fset = token.NewFileSet()
 
@@ -87,7 +121,7 @@ func main() {
 		Importer: importer.Default(),
 	}
 
-	_, err = conf.Check("seeddata", fset, []*ast.File{f}, &info)
+	pckg, err = conf.Check("seeddata", fset, []*ast.File{f}, &info)
 	if err != nil {
 		fmt.Printf("unexpected error: %v", err)
 	}
@@ -125,13 +159,11 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 					details(arg)
 				}
 			case "func(query interface{}) *gopkg.in/mgo.v2.Query":
-				fmt.Printf("\n\nn.Fun ================> %+v \n", n.Fun)
-				fmt.Printf("n.Fun ================> %+v \n", n.Fun.(*ast.SelectorExpr).X) //variablename
 				for _, arg := range n.Args {
 					getQueryFieldsInfo(arg)
 				}
 			default:
-				fmt.Println("\n\nast.CallExpr ================> ", info.TypeOf(n.Fun).String())
+				//fmt.Println("\n\nast.CallExpr ================> ", info.TypeOf(n.Fun).String())
 			}
 			fmt.Println()
 
@@ -149,22 +181,43 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 func getQueryFieldsInfo(node ast.Node) {
 	if node != nil {
 		pos := fset.Position(node.Pos())
-		fmt.Printf("\ngetting bson.M map fields info %s: %s\n", pos, reflect.TypeOf(node).String())
+		fmt.Printf("\n%s: %s\n", pos, reflect.TypeOf(node).String())
 
 		switch n := node.(type) {
 		case *ast.KeyValueExpr:
-			fmt.Printf("collection field name: %s\n", n.Key.(*ast.BasicLit).Value)
-			fmt.Printf("collection field type: %s\n", info.TypeOf(n.Value))
-		case *ast.CompositeLit:
-			if info.TypeOf(n.Type) != nil {
-				fmt.Println("type ", info.TypeOf(n.Type).String())
-			}
-			for _, row := range n.Elts {
-				fmt.Printf("elt %+v\n", row)
-				getQueryFieldsInfo(row)
-				if info.TypeOf(row) != nil {
-					fmt.Println("row ", info.TypeOf(row).String())
+			varName := pckg.Scope().Innermost(node.Pos()).Lookup("testCollection").Id()
+			if collectionName, ok := collectionsVarToNameMap[varName]; ok {
+				collFieldTypeKey := collectionName + "." + n.Key.(*ast.BasicLit).Value
+				expectedType, ok := collFieldTypes[collFieldTypeKey]
+				actualType := info.TypeOf(n.Value).String()
+				pos := fset.Position(n.Key.Pos())
+				if !ok {
+					errorFound = ErrTypeInfo{
+						Expected: "",
+						Actual:   collFieldTypeKey,
+						Filename: pos.Filename,
+						Column:   pos.Column,
+						Line:     pos.Line,
+					}
+					fmt.Println(errorFound)
+					os.Exit(0)
 				}
+				if expectedType != actualType {
+					errorFound = ErrTypeInfo{
+						Expected: expectedType,
+						Actual:   collFieldTypeKey,
+						Filename: pos.Filename,
+						Column:   pos.Column,
+						Line:     pos.Line,
+					}
+					fmt.Println(errorFound)
+					os.Exit(0)
+				}
+			}
+
+		case *ast.CompositeLit:
+			for _, row := range n.Elts {
+				getQueryFieldsInfo(row)
 			}
 		}
 	}
@@ -205,6 +258,10 @@ func typeReport() {
 	}
 	fmt.Println("Found these collections:")
 	for k, v := range collectionsVarToNameMap {
+		fmt.Printf("%s => %s\n", k, v)
+	}
+	fmt.Println("MongoDB info:")
+	for k, v := range collFieldTypes {
 		fmt.Printf("%s => %s\n", k, v)
 	}
 }
