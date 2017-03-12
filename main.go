@@ -110,17 +110,16 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 			obj := info.ObjectOf(n)
 			if obj != nil {
 				switch obj.Type().String() {
-				case "*gopkg.in/mgo.v2.Collection", "func(query interface{}) *gopkg.in/mgo.v2.Query":
+				case "*gopkg.in/mgo.v2.Collection":
 					details(n)
 				default:
-					fmt.Println("wwwwwwwwwwww ", info.ObjectOf(n).Type().String())
+					//fmt.Println("wwwwwwwwwwww ", info.ObjectOf(n).Type().String())
 				}
 			}
 
 		case *ast.CallExpr:
 			switch info.TypeOf(n.Fun).String() {
 			case "func(name string) *gopkg.in/mgo.v2.Collection", "func(query interface{}) *gopkg.in/mgo.v2.Query":
-
 				for _, arg := range n.Args {
 					details(arg)
 				}
@@ -148,8 +147,8 @@ func details(node ast.Node) {
 
 		switch n := node.(type) {
 		case *ast.KeyValueExpr:
-			fmt.Printf("value type: %s\n", info.TypeOf(n.Value))
-			fmt.Printf("key fields: %+v\n", n.Key)
+			fmt.Printf("collection field name: %s\n", n.Key.(*ast.BasicLit).Value)
+			fmt.Printf("collection field type: %s\n", info.TypeOf(n.Value))
 		case *ast.CompositeLit:
 			if info.TypeOf(n.Type) != nil {
 				fmt.Println("type ", info.TypeOf(n.Type).String())
