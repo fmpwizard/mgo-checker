@@ -54,6 +54,12 @@ var collectionsMap = make(map[string]string)
 var collectionsVarToNameMap = make(map[string]string)
 var currentKey = ""
 
+// "collection.field = string | int | bson.ObjectId"
+var collFieldTypes = make(map[string]string)
+
+var foundQ = false
+var foundM = false
+
 var fset *token.FileSet
 var info = types.Info{
 	Types: make(map[ast.Expr]types.TypeAndValue),
@@ -62,6 +68,11 @@ var info = types.Info{
 }
 
 func main() {
+
+	//fakenews:
+	collFieldTypes["xyz_company.name"] = "string"
+	collFieldTypes["xyz_company.zip_code"] = "string"
+
 	fset = token.NewFileSet()
 
 	f, err := parser.ParseFile(fset, "./seeddata/sample.go", nil, parser.ParseComments)
@@ -85,18 +96,6 @@ func main() {
 	typeReport()
 }
 
-func typeReport() {
-	fmt.Println("Found these variables:")
-	for k, v := range collectionsMap {
-		fmt.Printf("%s => %s\n", k, v)
-	}
-	fmt.Println("Found these collections:")
-	for k, v := range collectionsVarToNameMap {
-		fmt.Printf("%s => %s\n", k, v)
-	}
-
-}
-
 type printASTVisitor struct {
 	info *types.Info
 }
@@ -108,45 +107,28 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 		fmt.Printf("%s: %s", pos, reflect.TypeOf(node).String())
 		switch n := node.(type) {
 		case *ast.Ident:
-			if info.ObjectOf(n) != nil && info.ObjectOf(n).Type().String() == "*gopkg.in/mgo.v2.Collection" {
-				details(n)
+			obj := info.ObjectOf(n)
+			if obj != nil {
+				switch obj.Type().String() {
+				case "*gopkg.in/mgo.v2.Collection", "func(query interface{}) *gopkg.in/mgo.v2.Query":
+					details(n)
+				default:
+					fmt.Println("wwwwwwwwwwww ", info.ObjectOf(n).Type().String())
+				}
 			}
+
 		case *ast.CallExpr:
-			if info.TypeOf(n.Fun).String() == "func(name string) *gopkg.in/mgo.v2.Collection" {
-				//details(n.Fun)
+			switch info.TypeOf(n.Fun).String() {
+			case "func(name string) *gopkg.in/mgo.v2.Collection", "func(query interface{}) *gopkg.in/mgo.v2.Query":
+
 				for _, arg := range n.Args {
 					details(arg)
 				}
+			default:
+				fmt.Println("\n\nast.CallExpr ================> ", info.TypeOf(n.Fun).String())
 			}
 			fmt.Println()
-		case *ast.SelectorExpr:
-			if info.ObjectOf(n.Sel).Type().String() == "func(query interface{}) *gopkg.in/mgo.v2.Query" {
-				details(n)
-			}
-			/*
-				case *ast.SelectorExpr:
-					if info.ObjectOf(n.Sel).Type().String() == "func(name string) *gopkg.in/mgo.v2.Collection" {
-						fmt.Println("wwwwwwwwwwwwwwwwwwwwwwwww")
-						details(n)
-					}
-			*/
-		/*
-			case *ast.AssignStmt:
-					for _, x := range n.Lhs {
-						fmt.Println("\ngoing in the left ")
-						fmt.Printf("type is ========================: %+v\n", info.TypeOf(x.(ast.Expr)))
-						if info.TypeOf(x.(ast.Expr)).String() == "*gopkg.in/mgo.v2.Collection" {
-							details(x)
-						}
-					}
 
-					for _, x := range n.Rhs {
-						fmt.Println("\ngoing in the right ")
-						if info.TypeOf(x.(ast.Expr)).String() == "*gopkg.in/mgo.v2.Collection" {
-							details(x)
-						}
-					}
-		*/
 		case ast.Expr:
 			t := v.info.TypeOf(node.(ast.Expr))
 			if t != nil {
@@ -159,44 +141,56 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 }
 
 func details(node ast.Node) {
-	fmt.Println("\n--------------------------------------------------")
+	//fmt.Println("\n--------------------------------------------------")
 	if node != nil {
 		pos := fset.Position(node.Pos())
 		fmt.Printf("\nThis is is!!1!!!!!!!!!!!!!!!!!!! %s: %s\n", pos, reflect.TypeOf(node).String())
 
 		switch n := node.(type) {
-
+		case *ast.KeyValueExpr:
+			fmt.Printf("value type: %s\n", info.TypeOf(n.Value))
+			fmt.Printf("key fields: %+v\n", n.Key)
+		case *ast.CompositeLit:
+			if info.TypeOf(n.Type) != nil {
+				fmt.Println("type ", info.TypeOf(n.Type).String())
+			}
+			for _, row := range n.Elts {
+				fmt.Printf("elt %+v\n", row)
+				details(row)
+				if info.TypeOf(row) != nil {
+					fmt.Println("row ", info.TypeOf(row).String())
+				}
+			}
 		case *ast.BasicLit:
-			fmt.Printf("\rhs: %+v\n", n.Value)
+			fmt.Printf("\rBasicLit: %+v\n", n.Value)
 			if currentKey != "" {
 				collectionsVarToNameMap[currentKey] = n.Value
 				currentKey = ""
 			}
-		case *ast.SelectorExpr:
-			details(n.Sel)
+
 		case *ast.Ident:
 			fmt.Printf("ident Type: ========================: %+v\n", info.ObjectOf(n).Type().String())
 			fmt.Printf("ident Id: ========================: %+v\n", info.ObjectOf(n).Id()) //NAme and Id are the same
 
-			//fmt.Printf("ident String: ========================: %+v\n", info.ObjectOf(n).String())
-			/*
-				if info.ObjectOf(n).Parent() != nil {
-					for _, x := range info.ObjectOf(n).Parent().Names() {
-						//fmt.Printf("ident Parent Name: ========================: %+v\n", x)
-						fmt.Printf("ident Parent Lookup => Type.String(): ========================: %+v\n", info.ObjectOf(n).Parent().Lookup(x).Type().String())
-						fmt.Printf("ident Parent Lookup => Id(): ========================: %+v\n", info.ObjectOf(n).Parent().Lookup(x).Id())
-					}
-					fmt.Printf("ident Parent String: ========================: %+v\n", info.ObjectOf(n).Parent().String())
-				}
-			*/
 			if info.ObjectOf(n).Type().String() == "func(name string) *gopkg.in/mgo.v2.Collection" {
 				fmt.Printf("found it!!!!!!!!!!!!!!!\n")
-
 			}
 			if n.Obj != nil {
 				collectionsMap[info.ObjectOf(n).Id()] = info.ObjectOf(n).Type().String()
 				currentKey = info.ObjectOf(n).Id()
 			}
+
 		}
+	}
+}
+
+func typeReport() {
+	fmt.Println("Found these variables:")
+	for k, v := range collectionsMap {
+		fmt.Printf("%s => %s\n", k, v)
+	}
+	fmt.Println("Found these collections:")
+	for k, v := range collectionsVarToNameMap {
+		fmt.Printf("%s => %s\n", k, v)
 	}
 }
