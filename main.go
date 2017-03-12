@@ -106,6 +106,7 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 		pos := fset.Position(node.Pos())
 		fmt.Printf("%s: %s", pos, reflect.TypeOf(node).String())
 		switch n := node.(type) {
+
 		case *ast.Ident:
 			obj := info.ObjectOf(n)
 			if obj != nil {
@@ -119,9 +120,15 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 
 		case *ast.CallExpr:
 			switch info.TypeOf(n.Fun).String() {
-			case "func(name string) *gopkg.in/mgo.v2.Collection", "func(query interface{}) *gopkg.in/mgo.v2.Query":
+			case "func(name string) *gopkg.in/mgo.v2.Collection":
 				for _, arg := range n.Args {
 					details(arg)
+				}
+			case "func(query interface{}) *gopkg.in/mgo.v2.Query":
+				fmt.Printf("\n\nn.Fun ================> %+v \n", n.Fun)
+				fmt.Printf("n.Fun ================> %+v \n", n.Fun.(*ast.SelectorExpr).X) //variablename
+				for _, arg := range n.Args {
+					getQueryFieldsInfo(arg)
 				}
 			default:
 				fmt.Println("\n\nast.CallExpr ================> ", info.TypeOf(n.Fun).String())
@@ -139,11 +146,10 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 	return v
 }
 
-func details(node ast.Node) {
-	//fmt.Println("\n--------------------------------------------------")
+func getQueryFieldsInfo(node ast.Node) {
 	if node != nil {
 		pos := fset.Position(node.Pos())
-		fmt.Printf("\nThis is is!!1!!!!!!!!!!!!!!!!!!! %s: %s\n", pos, reflect.TypeOf(node).String())
+		fmt.Printf("\ngetting bson.M map fields info %s: %s\n", pos, reflect.TypeOf(node).String())
 
 		switch n := node.(type) {
 		case *ast.KeyValueExpr:
@@ -155,11 +161,21 @@ func details(node ast.Node) {
 			}
 			for _, row := range n.Elts {
 				fmt.Printf("elt %+v\n", row)
-				details(row)
+				getQueryFieldsInfo(row)
 				if info.TypeOf(row) != nil {
 					fmt.Println("row ", info.TypeOf(row).String())
 				}
 			}
+		}
+	}
+}
+
+func details(node ast.Node) {
+	if node != nil {
+		pos := fset.Position(node.Pos())
+		fmt.Printf("\nThis is is!!1!!!!!!!!!!!!!!!!!!! %s: %s\n", pos, reflect.TypeOf(node).String())
+
+		switch n := node.(type) {
 		case *ast.BasicLit:
 			fmt.Printf("\rBasicLit: %+v\n", n.Value)
 			if currentKey != "" {
@@ -178,7 +194,6 @@ func details(node ast.Node) {
 				collectionsMap[info.ObjectOf(n).Id()] = info.ObjectOf(n).Type().String()
 				currentKey = info.ObjectOf(n).Id()
 			}
-
 		}
 	}
 }
