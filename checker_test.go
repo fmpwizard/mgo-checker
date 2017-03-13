@@ -136,6 +136,20 @@ type Company struct {
 }
 `
 
+var src5 = `
+package seeddata
+
+
+// Company represents a Company document in mongodb
+// mgo:model:xyz_company
+type Company struct {
+	// Name the company name
+	Name, Street string
+	// Zip the company name
+	Zip string ` + "`json:\"zip_code\" bson:\"zip_code\"`" + `
+}
+`
+
 func TestExpectStrGotInt(t *testing.T) {
 	errorFound = nil
 	collFieldTypes = make(map[string]string)
@@ -171,8 +185,50 @@ mgo:model:zzz_company`)
 	}
 }
 
-func TestFieldFromTag(t *testing.T) {
+func TestFieldFromTag1(t *testing.T) {
 	r := fieldFromTag("`bson:\"name\"`")
+	if r != "name" {
+		t.Errorf("expeted `name` but got: %s", r)
+	}
+}
+
+func TestFieldFromTag2(t *testing.T) {
+	r := fieldFromTag("name")
+	if r != "name" {
+		t.Errorf("expeted `name` but got: %s", r)
+	}
+}
+
+func TestFieldFromTag3(t *testing.T) {
+	r := fieldFromTag("name,omitempty")
+	if r != "name" {
+		t.Errorf("expeted `name` but got: %s", r)
+	}
+}
+
+func TestFieldFromTag4(t *testing.T) {
+	r := fieldFromTag("`bson:\",omitempty\" json:\"jsonkey\"`")
+	if r != "" {
+		t.Errorf("expeted `<empty string>` but got: %s", r)
+	}
+}
+
+func TestFieldFromTag5(t *testing.T) {
+	r := fieldFromTag(",minsize")
+	if r != "" {
+		t.Errorf("expeted `<empty string>` but got: %s", r)
+	}
+}
+
+func TestFieldFromTag6(t *testing.T) {
+	r := fieldFromTag("name,omitempty,minsize")
+	if r != "name" {
+		t.Errorf("expeted `name` but got: %s", r)
+	}
+}
+
+func TestFieldFromTag7(t *testing.T) {
+	r := fieldFromTag("`json:\"name,omitempty\" bson:\"name\"`")
 	if r != "name" {
 		t.Errorf("expeted `name` but got: %s", r)
 	}
@@ -207,11 +263,39 @@ func TestReadStructDirective2(t *testing.T) {
 		for k, v := range collFieldTypes {
 			t.Logf("%s: %s\n", k, v)
 		}
-		if len(collFieldTypes) != 2 {
-			t.Errorf("found: %d, expected: %d mongodb fields detected", len(collFieldTypes), 2)
+		if len(collFieldTypes) != 3 {
+			t.Errorf("found: %d, expected: %d mongodb fields detected", len(collFieldTypes), 3)
 		}
 		if ret := collFieldTypes["\"xyz_company\".\"name\""]; ret != "string" {
-			t.Errorf("found %q instead of \"string\"", ret)
+			t.Errorf("wrong name field type. Found %q instead of \"string\"", ret)
+		}
+		if ret := collFieldTypes["\"xyz_company\".\"street\""]; ret != "string" {
+			t.Errorf("wrong street field type. Found %q instead of \"string\"", ret)
+		}
+	}
+}
+func TestReadStructDirectiveTag(t *testing.T) {
+	t.SkipNow()
+	errorFound = nil
+	collFieldTypes = make(map[string]string)
+	files := initCheckerSingleFile("sample5.go", "seeddata", src5)
+	for _, f := range files {
+		ast.Walk(&printASTVisitor{&info}, f)
+		//the logging only happens on a fail test
+		for k, v := range collFieldTypes {
+			t.Logf("%s: %s\n", k, v)
+		}
+		if len(collFieldTypes) != 3 {
+			t.Errorf("found: %d, expected: %d mongodb fields detected", len(collFieldTypes), 3)
+		}
+		if ret := collFieldTypes["\"xyz_company\".\"zip_code\""]; ret != "string" {
+			t.Errorf("wrong zip_code field type. Found %q instead of \"string\"", ret)
+		}
+		if ret := collFieldTypes["\"xyz_company\".\"name\""]; ret != "string" {
+			t.Errorf("wrong name field type. Found %q instead of \"string\"", ret)
+		}
+		if ret := collFieldTypes["\"xyz_company\".\"street\""]; ret != "string" {
+			t.Errorf("wrong street field type. Found %q instead of \"string\"", ret)
 		}
 	}
 }

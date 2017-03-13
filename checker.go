@@ -8,7 +8,6 @@ import (
 	"go/token"
 	"go/types"
 	"os"
-	//"reflect"
 	"strings"
 )
 
@@ -99,29 +98,26 @@ type printASTVisitor struct {
 
 func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 	if node != nil {
-		//pos := fset.Position(node.Pos())
-		//fmt.Printf("%s: %s", pos, reflect.TypeOf(node).String())
 		switch n := node.(type) {
 
 		case *ast.GenDecl:
 			if ok, t := getMgoCollectionFromComment(n.Doc.Text()); ok {
 				for _, row := range n.Specs {
-					//fmt.Printf("\nhere is it %+v\n", row.(*ast.TypeSpec).Name)
 					for _, field := range row.(*ast.TypeSpec).Type.(*ast.StructType).Fields.List {
-						//fmt.Printf("\nhere are the tags %+v\n", field.Type)
 						cleanFieldName := ""
 						if field.Tag != nil {
 							cleanFieldName = fieldFromTag(field.Tag.Value)
 						}
 						if cleanFieldName == "" {
-							for _, v := range field.Names {
-								cleanFieldName = strings.ToLower(v.Name)
+							for _, name := range field.Names {
+								cleanFieldName = strings.ToLower(name.Name)
+								collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = v.info.TypeOf(field.Type).String()
 							}
+						} else {
+							collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = v.info.TypeOf(field.Type).String()
 						}
-						collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = v.info.TypeOf(field.Type).String()
 					}
 				}
-				//fmt.Println("collection name from directive: ", t)
 			}
 
 		case *ast.Ident:
@@ -150,7 +146,6 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 			default:
 				//fmt.Println("\n\nast.CallExpr ================> ", info.TypeOf(n.Fun).String())
 			}
-			//fmt.Println()
 
 		case ast.Expr:
 			t := v.info.TypeOf(node.(ast.Expr))
@@ -169,8 +164,6 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 
 func getQueryFieldsInfo(node ast.Node) *ErrTypeInfo {
 	if node != nil {
-		//pos := fset.Position(node.Pos())
-		//fmt.Printf("\n%s: %s\n", pos, reflect.TypeOf(node).String())
 
 		switch n := node.(type) {
 		case *ast.KeyValueExpr:
@@ -216,24 +209,15 @@ func getQueryFieldsInfo(node ast.Node) *ErrTypeInfo {
 
 func details(node ast.Node) {
 	if node != nil {
-		//pos := fset.Position(node.Pos())
-		//fmt.Printf("\nThis is is!!1!!!!!!!!!!!!!!!!!!! %s: %s\n", pos, reflect.TypeOf(node).String())
-
 		switch n := node.(type) {
+
 		case *ast.BasicLit:
-			//fmt.Printf("\rBasicLit: %+v\n", n.Value)
 			if currentKey != "" {
 				collectionsVarToNameMap[currentKey] = n.Value
 				currentKey = ""
 			}
 
 		case *ast.Ident:
-			//fmt.Printf("ident Type: ========================: %+v\n", info.ObjectOf(n).Type().String())
-			//fmt.Printf("ident Id: ========================: %+v\n", info.ObjectOf(n).Id()) //NAme and Id are the same
-
-			if info.ObjectOf(n).Type().String() == "func(name string) *gopkg.in/mgo.v2.Collection" {
-				//fmt.Printf("found it!!!!!!!!!!!!!!!\n")
-			}
 			if n.Obj != nil {
 				collectionsMap[info.ObjectOf(n).Id()] = info.ObjectOf(n).Type().String()
 				currentKey = info.ObjectOf(n).Id()
@@ -266,9 +250,20 @@ func getMgoCollectionFromComment(s string) (bool, string) {
 }
 
 func fieldFromTag(s string) string {
-	//fmt.Println(s)
-	if strings.HasPrefix(s, "`bson:\"") {
-		return strings.TrimSuffix(strings.TrimPrefix(s, "`bson:\""), "\"`")
+	if strings.Contains(s, "bson:\"") {
+		start := strings.Index(s, "bson:\"") + 6 //6 = len(bson:")
+		s = s[start:]
+		end := strings.Index(s, "\"")
+		tag := s[:end]
+		fields := strings.Split(tag, ",")
+		if len(fields[0]) == 0 {
+			return ""
+		}
+		return strings.TrimPrefix(tag, "bson:\"")
+	} else if !strings.Contains(s, ":") {
+		fields := strings.Split(s, ",")
+		return fields[0]
 	}
+
 	return ""
 }
