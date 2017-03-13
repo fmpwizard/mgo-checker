@@ -15,7 +15,7 @@ var collectionsMap = make(map[string]string)
 var collectionsVarToNameMap = make(map[string]string)
 var currentKey = ""
 
-var structTocollection = make(map[string]string)
+//var structTocollection = make(map[string]string)
 
 // "collection.field = string | int | bson.ObjectId"
 var collFieldTypes = make(map[string]string)

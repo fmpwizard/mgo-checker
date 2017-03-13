@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"go/ast"
 	"testing"
 )
@@ -123,6 +122,20 @@ func findByName(name string) {
 }
 `
 
+var src4 = `
+package seeddata
+
+
+// Company represents a Company document in mongodb
+// mgo:model:xyz_company
+type Company struct {
+	// Name the company name
+	Name, Street string
+	// Zip the company name
+	Zip string ` + "`bson:\"zip_code\"`" + `
+}
+`
+
 func TestExpectStrGotInt(t *testing.T) {
 	errorFound = nil
 	collFieldTypes = make(map[string]string)
@@ -141,7 +154,6 @@ func TestWrongFieldName(t *testing.T) {
 	files := initCheckerSingleFile("sample2.go", "seeddata", src2)
 	for _, f := range files {
 		ast.Walk(&printASTVisitor{&info}, f)
-		fmt.Printf("%+v\n\n", errorFound)
 		if errorFound.Expected != "" {
 			t.Errorf("actual: %s, expected: %s", errorFound.Actual, errorFound.Expected)
 		}
@@ -166,7 +178,7 @@ func TestFieldFromTag(t *testing.T) {
 	}
 }
 
-func TestReadStructDirective(t *testing.T) {
+func TestReadStructDirective1(t *testing.T) {
 	errorFound = nil
 	collFieldTypes = make(map[string]string)
 	files := initCheckerSingleFile("sample3.go", "seeddata", src3)
@@ -178,6 +190,25 @@ func TestReadStructDirective(t *testing.T) {
 		}
 		if len(collFieldTypes) != 4 {
 			t.Errorf("found: %d, expected: %d mongodb fields detected", len(collFieldTypes), 4)
+		}
+		if ret := collFieldTypes["\"xyz_company\".\"name\""]; ret != "string" {
+			t.Errorf("found %q instead of \"string\"", ret)
+		}
+	}
+}
+
+func TestReadStructDirective2(t *testing.T) {
+	errorFound = nil
+	collFieldTypes = make(map[string]string)
+	files := initCheckerSingleFile("sample4.go", "seeddata", src4)
+	for _, f := range files {
+		ast.Walk(&printASTVisitor{&info}, f)
+		//the logging only happens on a fail test
+		for k, v := range collFieldTypes {
+			t.Logf("%s: %s\n", k, v)
+		}
+		if len(collFieldTypes) != 2 {
+			t.Errorf("found: %d, expected: %d mongodb fields detected", len(collFieldTypes), 2)
 		}
 		if ret := collFieldTypes["\"xyz_company\".\"name\""]; ret != "string" {
 			t.Errorf("found %q instead of \"string\"", ret)
