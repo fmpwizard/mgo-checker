@@ -150,6 +150,84 @@ type Company struct {
 }
 `
 
+var src6 = `
+package seeddata
+
+import (
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
+	"time"
+)
+
+// Company represents a Company document in mongodb
+// mgo:model:xyz_company
+type Company struct {
+	// Name the company name
+	Name string
+	// Zip the company name
+	Zip string ` + "`bson:\"zip_code\"`" + `
+}
+
+// User represents a user document in mongodb
+// mgo:model:xyz_users
+type User struct {
+	// Name the user name
+	Name string ` + "`bson:\"name\"`" + `
+	// Email the uer's email
+	Email string ` + "`bson:\"email\"`" + `
+}
+
+// connect is here
+func connect() *mgo.Session {
+	xyzWebSession, _ := mgo.DialWithTimeout("127.0.0.1:2700/dbname", 2*time.Second)
+	return xyzWebSession
+}
+func findByName(name string) {
+	var ret []Company
+	testCollection := connect().DB("dbname").C("xyz_company")
+	testCollection.Find(bson.M{"name": "1", "zip_code": 1}).All(&ret)
+}
+`
+
+var src7 = `
+package seeddata
+
+import (
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
+	"time"
+)
+
+// Company represents a Company document in mongodb
+// mgo:model:xyz_company
+type Company struct {
+	// Name the company name
+	Name string
+	// Zip the company name
+	Zip string ` + "`bson:\"zip_code\"`" + `
+}
+
+// User represents a user document in mongodb
+// mgo:model:xyz_users
+type User struct {
+	// Name the user name
+	Name string ` + "`bson:\"name\"`" + `
+	// Email the uer's email
+	Email string ` + "`bson:\"email\"`" + `
+}
+
+// connect is here
+func connect() *mgo.Session {
+	xyzWebSession, _ := mgo.DialWithTimeout("127.0.0.1:2700/dbname", 2*time.Second)
+	return xyzWebSession
+}
+func findByName(name string) {
+	var ret []Company
+	testCollection := connect().DB("dbname").C("xyz_company")
+	testCollection.Find(bson.M{"name": "1", "zip": "23445"}).All(&ret)
+}
+`
+
 func TestExpectStrGotInt(t *testing.T) {
 	errorFound = nil
 	collFieldTypes = make(map[string]string)
@@ -296,6 +374,30 @@ func TestReadStructDirectiveTag(t *testing.T) {
 		}
 		if ret := collFieldTypes["\"xyz_company\".\"street\""]; ret != "string" {
 			t.Errorf("wrong street field type. Found %q instead of \"string\"", ret)
+		}
+	}
+}
+
+func TestExpectStrGotIntMultiItemMap1(t *testing.T) {
+	errorFound = nil
+	collFieldTypes = make(map[string]string)
+	files := initCheckerSingleFile("sample6.go", "seeddata", src6)
+	for _, f := range files {
+		ast.Walk(&printASTVisitor{&info}, f)
+		if errorFound.Actual != "int" {
+			t.Errorf("actual: %s, expected: %s", errorFound.Actual, errorFound.Expected)
+		}
+	}
+}
+
+func TestExpectStrGotIntMultiItemMap2(t *testing.T) {
+	errorFound = nil
+	collFieldTypes = make(map[string]string)
+	files := initCheckerSingleFile("sample7.go", "seeddata", src7)
+	for _, f := range files {
+		ast.Walk(&printASTVisitor{&info}, f)
+		if errorFound.Expected != "" {
+			t.Errorf("actual: %s, expected: %+v", errorFound.Actual, errorFound)
 		}
 	}
 }
