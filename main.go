@@ -43,6 +43,5 @@ func main() {
 			fmt.Println(errorFound)
 		}
 	}
-	getDocs(*dirPath)
 	typeReport()
 }

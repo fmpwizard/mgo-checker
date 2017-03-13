@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"go/ast"
-	"go/doc"
 	"go/importer"
 	"go/parser"
 	"go/token"
@@ -69,27 +68,6 @@ func initChecker(dirPath string) []*ast.File {
 	return files
 }
 
-func getDocs(path string) {
-	d, err := parser.ParseDir(fset, path, nil, parser.ParseComments)
-	if err != nil {
-		fmt.Println("failed to parse dir ", err)
-		os.Exit(1)
-	}
-
-	for pckge, f := range d {
-		p := doc.New(f, path, 0)
-		for _, t := range p.Types {
-			if found, collection := getMgoCollectionFromComment(t.Doc); found {
-				for _, v := range t.Decl.Specs {
-					fmt.Printf("yes!!! %+v\n", v)
-				}
-				fmt.Printf("yes!!! %s.%s, %s", pckge, t.Name, collection)
-			}
-		}
-	}
-
-}
-
 func initCheckerSingleFile(filePath, pkg string, src interface{}) []*ast.File {
 	fset = token.NewFileSet()
 	f, err := parser.ParseFile(fset, filePath, src, parser.ParseComments)
@@ -131,7 +109,15 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 					fmt.Printf("\nhere is it %+v\n", row.(*ast.TypeSpec).Name)
 					for _, field := range row.(*ast.TypeSpec).Type.(*ast.StructType).Fields.List {
 						fmt.Printf("\nhere are the tags %+v\n", field.Type)
-						cleanFieldName := fieldFromTag(field.Tag.Value)
+						cleanFieldName := ""
+						if field.Tag != nil {
+							cleanFieldName = fieldFromTag(field.Tag.Value)
+						}
+						if cleanFieldName == "" {
+							for _, v := range field.Names {
+								cleanFieldName = strings.ToLower(v.Name)
+							}
+						}
 						collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = v.info.TypeOf(field.Type).String()
 					}
 				}
