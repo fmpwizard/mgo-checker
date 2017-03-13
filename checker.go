@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/doc"
 	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
 	"os"
 	"reflect"
+	"strings"
 )
 
 // ErrTypeInfo holds information about the incorrect type parameter found.
@@ -47,7 +49,6 @@ func initChecker(dirPath string) []*ast.File {
 		fmt.Println("failed to parse file ", err)
 		os.Exit(1)
 	}
-
 	conf := &types.Config{
 		Error: func(e error) {
 			fmt.Println(e)
@@ -66,6 +67,27 @@ func initChecker(dirPath string) []*ast.File {
 		}
 	}
 	return files
+}
+
+func getDocs(path string) {
+	d, err := parser.ParseDir(fset, path, nil, parser.ParseComments)
+	if err != nil {
+		fmt.Println("failed to parse dir ", err)
+		os.Exit(1)
+	}
+
+	for pckge, f := range d {
+		p := doc.New(f, path, 0)
+		for _, t := range p.Types {
+			if found, collection := getMgoCollectionFromComment(t.Doc); found {
+				for _, v := range t.Decl.Specs {
+					fmt.Printf("yes!!! %+v\n", v)
+				}
+				fmt.Printf("yes!!! %s.%s, %s", pckge, t.Name, collection)
+			}
+		}
+	}
+
 }
 
 func initCheckerSingleFile(filePath, pkg string, src interface{}) []*ast.File {
@@ -102,6 +124,19 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 		pos := fset.Position(node.Pos())
 		fmt.Printf("%s: %s", pos, reflect.TypeOf(node).String())
 		switch n := node.(type) {
+
+		case *ast.GenDecl:
+			if ok, t := getMgoCollectionFromComment(n.Doc.Text()); ok {
+				for _, row := range n.Specs {
+					fmt.Printf("\nhere is it %+v\n", row.(*ast.TypeSpec).Name)
+					for _, field := range row.(*ast.TypeSpec).Type.(*ast.StructType).Fields.List {
+						fmt.Printf("\nhere are the tags %+v\n", field.Type)
+						cleanFieldName := fieldFromTag(field.Tag.Value)
+						collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = v.info.TypeOf(field.Type).String()
+					}
+				}
+				fmt.Println("collection name from directive: ", t)
+			}
 
 		case *ast.Ident:
 			obj := info.ObjectOf(n)
@@ -234,4 +269,20 @@ func typeReport() {
 	for k, v := range collFieldTypes {
 		fmt.Printf("%s => %s\n", k, v)
 	}
+}
+
+func getMgoCollectionFromComment(s string) (bool, string) {
+	if strings.Contains(s, "mgo:model:") {
+		start := strings.Index(s, "mgo:model:")
+		return true, strings.TrimSpace(strings.TrimPrefix(s[start:], "mgo:model:"))
+	}
+	return false, ""
+}
+
+func fieldFromTag(s string) string {
+	fmt.Println(s)
+	if strings.HasPrefix(s, "`bson:\"") {
+		return strings.TrimSuffix(strings.TrimPrefix(s, "`bson:\""), "\"`")
+	}
+	return ""
 }

@@ -95,7 +95,6 @@ func TestExpectStrGotInt(t *testing.T) {
 			t.Errorf("actual: %s, expected: %s", errorFound.Actual, errorFound.Expected)
 		}
 	}
-
 }
 
 func TestWrongFieldName(t *testing.T) {
@@ -109,5 +108,23 @@ func TestWrongFieldName(t *testing.T) {
 		if errorFound.Expected != "" {
 			t.Errorf("actual: %s, expected: %s", errorFound.Actual, errorFound.Expected)
 		}
+	}
+}
+
+func TestGetMgoCollectionFromComment(t *testing.T) {
+	found, name := getMgoCollectionFromComment(`Company represents a Company document in mongodb
+mgo:model:zzz_company`)
+	if !found {
+		t.Error("didn't find direective")
+	}
+	if name != "zzz_company" {
+		t.Errorf("expected `zzz_company` but got: `%s`", name)
+	}
+}
+
+func TestFieldFromTag(t *testing.T) {
+	r := fieldFromTag("`bson:\"name\"`")
+	if r != "name" {
+		t.Errorf("expeted `name` but got: %s", r)
 	}
 }

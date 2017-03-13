@@ -15,6 +15,8 @@ var collectionsMap = make(map[string]string)
 var collectionsVarToNameMap = make(map[string]string)
 var currentKey = ""
 
+var structTocollection = make(map[string]string)
+
 // "collection.field = string | int | bson.ObjectId"
 var collFieldTypes = make(map[string]string)
 
@@ -31,10 +33,6 @@ var info = types.Info{
 
 func main() {
 
-	//fakenews:
-	collFieldTypes[`"xyz_company"."name"`] = "string"
-	collFieldTypes[`"xyz_company"."zip_code"`] = "string"
-
 	dirPath := flag.String("dir-path", "", "specify the path to the folder with go files to check")
 	flag.Parse()
 
@@ -45,5 +43,6 @@ func main() {
 			fmt.Println(errorFound)
 		}
 	}
+	getDocs(*dirPath)
 	typeReport()
 }

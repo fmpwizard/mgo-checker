@@ -10,7 +10,7 @@ import (
 type Company struct {
 	// Name the company name
 	Name string `bson:"name"`
-	// Zip the company name
+	// Zip the company zip code
 	Zip string `bson:"zip_code"`
 }
 
