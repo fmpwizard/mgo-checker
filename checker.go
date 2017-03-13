@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"os"
 	"reflect"
 )
 
@@ -44,6 +45,7 @@ func initChecker(dirPath string) []*ast.File {
 	pcks, err := parser.ParseDir(fset, dirPath, nil, parser.ParseComments)
 	if err != nil {
 		fmt.Println("failed to parse file ", err)
+		os.Exit(1)
 	}
 
 	conf := &types.Config{
@@ -60,8 +62,34 @@ func initChecker(dirPath string) []*ast.File {
 		pckg, err = conf.Check(pckPath, fset, files, &info)
 		if err != nil {
 			fmt.Printf("unexpected error: %v", err)
+			os.Exit(1)
 		}
 	}
+	return files
+}
+
+func initCheckerSingleFile(filePath, pkg string, src interface{}) []*ast.File {
+	fset = token.NewFileSet()
+	f, err := parser.ParseFile(fset, filePath, src, parser.ParseComments)
+	files := []*ast.File{f}
+	if err != nil {
+		fmt.Println("failed to parse file ", err)
+		os.Exit(1)
+	}
+
+	conf := &types.Config{
+		Error: func(e error) {
+			fmt.Println(e)
+		},
+		Importer: importer.Default(),
+	}
+
+	pckg, err = conf.Check(pkg, fset, files, &info)
+	if err != nil {
+		fmt.Printf("unexpected error: %v", err)
+		os.Exit(1)
+	}
+
 	return files
 }
 
