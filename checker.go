@@ -139,6 +139,7 @@ func (v *printASTVisitor) Visit(node ast.Node) ast.Visitor {
 				}
 			case "func(query interface{}) *gopkg.in/mgo.v2.Query":
 				for _, arg := range n.Args {
+					fmt.Println("11111111111111")
 					if ret := getQueryFieldsInfo(arg); ret != nil {
 						return nil
 					}
@@ -170,20 +171,10 @@ func getQueryFieldsInfo(node ast.Node) *ErrTypeInfo {
 			varName := pckg.Scope().Innermost(node.Pos()).Lookup("testCollection").Id()
 			if collectionName, ok := collectionsVarToNameMap[varName]; ok {
 				collFieldTypeKey := collectionName + "." + n.Key.(*ast.BasicLit).Value
-				expectedType, ok := collFieldTypes[collFieldTypeKey]
+				expectedType := collFieldTypes[collFieldTypeKey]
 				actualType := info.TypeOf(n.Value).String()
 				pos := fset.Position(n.Key.Pos())
-				if !ok {
-					errorFound = &ErrTypeInfo{
-						Expected: "",
-						Actual:   collFieldTypeKey,
-						Filename: pos.Filename,
-						Column:   pos.Column,
-						Line:     pos.Line,
-					}
-					return errorFound
 
-				}
 				if expectedType != actualType {
 					errorFound = &ErrTypeInfo{
 						Expected: expectedType,
@@ -198,6 +189,7 @@ func getQueryFieldsInfo(node ast.Node) *ErrTypeInfo {
 
 		case *ast.CompositeLit:
 			for _, row := range n.Elts {
+				fmt.Println("22222222222222222222")
 				if ret := getQueryFieldsInfo(row); ret != nil {
 					return ret
 				}

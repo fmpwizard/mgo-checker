@@ -34,6 +34,7 @@ var info = types.Info{
 func main() {
 
 	dirPath := flag.String("dir-path", "", "specify the path to the folder with go files to check")
+	debug := flag.Bool("debug", false, "print extra debug information")
 	flag.Parse()
 
 	files := initChecker(*dirPath)
@@ -43,5 +44,7 @@ func main() {
 			fmt.Println(errorFound)
 		}
 	}
-	typeReport()
+	if *debug {
+		typeReport()
+	}
 }
