@@ -36,7 +36,6 @@ func init() {
 }
 
 func getVarAndCollectionName(f *File, node ast.Node) {
-	//diego
 	fmt.Println("ssssssssss")
 	call := node.(*ast.CallExpr)
 	if !isFuncC(f, call) {
@@ -67,7 +66,6 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 		return
 	}
 	fmt.Printf("row : %+v\n", collName.Value)
-	//DIego : continue here, run
 	// go install && mgo-checker -dir-path=seeddata
 	// and see how to best store the var => colletion name values/
 	// to account for files with same var name but diff scopes
@@ -316,7 +314,11 @@ func (f *File) Visit(node ast.Node) ast.Visitor {
 				key = exprStmt
 		*/
 	case *ast.FuncDecl:
-		findFnUsingCollection(f, node)
+		err := findFnUsingCollection(f, node)
+		if err != nil {
+			fmt.Println(err)
+			return nil
+		}
 		/*
 			case *ast.FuncLit:
 					key = funcLit
@@ -343,7 +345,7 @@ func (f *File) Visit(node ast.Node) ast.Visitor {
 	return f
 }
 
-func findFnUsingCollection(f *File, node ast.Node) {
+func findFnUsingCollection(f *File, node ast.Node) *ErrTypeInfo {
 	if n, ok := node.(*ast.FuncDecl); ok {
 		if collName, ok := f.funcUsingCollection[f.pkg.path+"."+n.Name.Name]; ok {
 			fmt.Printf("Found matching fn: %s using collection: %+v\n", n.Name.Name, collName)
@@ -354,18 +356,53 @@ func findFnUsingCollection(f *File, node ast.Node) {
 				}
 				if exp, ok := stmt.(*ast.AssignStmt); ok {
 					for _, assign := range exp.Rhs {
+						//fmt.Printf("assign: %+v\n", assign)
 						if callExp, ok := assign.(*ast.CallExpr); ok {
-							for _, v := range callExp.Args { //Diego continue here
-								fmt.Printf(" ================>>>>>>>>>>>> arg: %+v\n", callExp.Fun)
-								fmt.Printf(" ================>>>>>>>>>>>> arg: %+v\n", v)
+							if fn, ok := callExp.Fun.(*ast.SelectorExpr); ok {
+								//fmt.Printf(" ================>>>>>>>>>>>> Fun1: %+v\n", fn.X)
+								if a, ok := fn.X.(*ast.CallExpr); ok {
+									for _, b := range a.Args {
+										if c, ok := b.(*ast.CompositeLit); ok {
+											for _, d := range c.Elts {
+												if keyValue, ok := d.(*ast.KeyValueExpr); ok {
+													k := collName
+													actualType := ""
+													if mongoFieldNameUsedInMapQuery, ok := keyValue.Key.(*ast.BasicLit); ok {
+														k = k + "." + mongoFieldNameUsedInMapQuery.Value
+													}
+													if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.BasicLit); ok {
+														actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
+													}
+
+													expectedType := collFieldTypes[k]
+													pos := f.fset.Position(keyValue.Pos())
+
+													if expectedType != actualType {
+														errorFound = &ErrTypeInfo{
+															Expected: expectedType,
+															Actual:   actualType,
+															Filename: pos.Filename,
+															Column:   pos.Column,
+															Line:     pos.Line,
+														}
+														return errorFound
+													}
+
+													//fmt.Println("key: ", k)
+													//fmt.Println("map type collFieldTypes ", collFieldTypes[k])
+												}
+											}
+										}
+									}
+								}
 							}
 						}
 					}
 				}
-				//ExprStmt or AssignStmt
 			}
 		}
 	}
+	return nil
 }
 
 func getCollectionNameIThink(f *File, node ast.Node) {

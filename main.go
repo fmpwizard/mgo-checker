@@ -22,6 +22,26 @@ type ErrTypeInfo struct {
 	Column   int
 }
 
+func (e ErrTypeInfo) String() string {
+	if e.Expected == "" {
+		return fmt.Sprintf(
+			"%s:%d:%d: wrong mongodb field name, could not find field: %q",
+			e.Filename,
+			e.Line,
+			e.Column,
+			e.Actual,
+		)
+	}
+	return fmt.Sprintf(
+		"%s:%d:%d: wrong 'value' type, expected %q but got %q",
+		e.Filename,
+		e.Line,
+		e.Column,
+		e.Expected,
+		e.Actual,
+	)
+}
+
 var errorFound *ErrTypeInfo
 
 //This will need a mutex
