@@ -3,9 +3,12 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/importer"
 	"go/token"
 	"go/types"
+	"gopkg.in/mgo.v2"
 	"os"
+	"reflect"
 	"strings"
 )
 
@@ -28,6 +31,9 @@ var (
 	rangeStmt     *ast.RangeStmt
 	returnStmt    *ast.ReturnStmt
 	structType    *ast.StructType
+
+	//Used to compare types
+	mgoCollection *mgo.Collection
 )
 
 func init() {
@@ -73,18 +79,34 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 	for _, row := range stmts {
 		usage, ok := row.(*ast.ExprStmt)
 		if ok {
-			if f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String() == "*gopkg.in/mgo.v2.Collection" {
+			tpe := types.NewPointer(importType("gopkg.in/mgo.v2", "Collection"))
+			// using types.IdenticalIgnoreTags keeps returning false here
+			if f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String() == tpe.String() {
 				x, ok := usage.X.(*ast.CallExpr).Fun.(*ast.Ident)
 				if ok {
 					//useful info for a line like:
 					//findByZip(companyColl, "diego")
 					//x.Obj.Decl.(*ast.FuncDecl).Type.Params.List[0].Type
-					fmt.Printf("============ %+v\n", x.Name)
 					f.funcUsingCollection[f.pkg.path+"."+x.Name] = collName.Value
 				}
 			}
 		}
 	}
+}
+
+// importType returns the type denoted by the qualified identifier
+// path.name, and adds the respective package to the imports map
+// as a side effect. In case of an error, importType returns nil.
+func importType(path, name string) types.Type {
+	pkg, err := importer.Default().Import(path)
+	if err != nil {
+		// This can happen if the package at path hasn't been compiled yet.
+		return nil
+	}
+	if obj, ok := pkg.Scope().Lookup(name).(*types.TypeName); ok {
+		return obj.Type()
+	}
+	return nil
 }
 
 // isFuncC checks whether the given call expression is on
@@ -370,7 +392,12 @@ func findFnUsingCollection(f *File, node ast.Node) *ErrTypeInfo {
 													if mongoFieldNameUsedInMapQuery, ok := keyValue.Key.(*ast.BasicLit); ok {
 														k = k + "." + mongoFieldNameUsedInMapQuery.Value
 													}
+													//value is a literal value, not a variable
 													if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.BasicLit); ok {
+														actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
+													}
+													//valule is a variable
+													if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.Ident); ok {
 														actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
 													}
 

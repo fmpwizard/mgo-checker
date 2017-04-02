@@ -19,7 +19,7 @@ func searchStep1() {
 	companyColl := connect().DB("dbname").C("xyz_company")
 	fmt.Println("some random line her")
 	fmt.Println("another here, just tomess with you")
-	findByZip(companyColl, "diego")
+	findByZip(companyColl, 1)
 }
 
 // connect is here
@@ -34,8 +34,8 @@ func findByName(name string) {
 	testCollection.Find(bson.M{"name": 1}).All(&ret)
 }
 
-func findByZip(collection *mgo.Collection, name string) {
+func findByZip(collection *mgo.Collection, n int64) {
 	var ret []Company
-	err := collection.Find(bson.M{"name": 1}).All(&ret)
+	err := collection.Find(bson.M{"name": n}).All(&ret)
 	_ = err
 }
