@@ -1,6 +1,7 @@
 package seeddata
 
 import (
+	"fmt"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
 )
@@ -14,13 +15,27 @@ type Company struct {
 	Zip string `bson:"zip_code"`
 }
 
+func searchStep1() {
+	companyColl := connect().DB("dbname").C("xyz_company")
+	fmt.Println("some random line her")
+	fmt.Println("another here, just tomess with you")
+	findByZip(companyColl, "diego")
+}
+
 // connect is here
 func connect() *mgo.Session {
 	xyzWebSession, _ := mgo.DialWithTimeout("127.0.0.1:2700/dbname", 0)
 	return xyzWebSession
 }
+
 func findByName(name string) {
 	var ret []Company
 	testCollection := connect().DB("dbname").C("xyz_company")
 	testCollection.Find(bson.M{"name": 1}).All(&ret)
+}
+
+func findByZip(collection *mgo.Collection, name string) {
+	var ret []Company
+	err := collection.Find(bson.M{"name": 1}).All(&ret)
+	_ = err
 }
