@@ -8,7 +8,6 @@ import (
 	"go/types"
 	"gopkg.in/mgo.v2"
 	"os"
-	"reflect"
 	"strings"
 )
 
