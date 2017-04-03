@@ -40,16 +40,11 @@ func findByZip(collection *mgo.Collection, n int64) {
 	_ = err
 }
 
-/*
 func findTradeBlotter(session *mgo.Session, blotterID bson.ObjectId) error {
 	_session := session.Copy()
 	defer _session.Close()
-	collection := _session.DB("acm-web").C("xyz_company")
+	blotterCollectionVar := _session.DB("acm-web").C("xyz_company")
 	var ret []Company
-	err := collection.Find(bson.M{"name": blotterID}).One(&ret)
-	if err != nil {
-		return nil
-	}
-	return nil
+	err := blotterCollectionVar.Find(bson.M{"name": blotterID}).One(&ret)
+	return err
 }
-*/

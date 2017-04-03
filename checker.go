@@ -43,12 +43,10 @@ func init() {
 
 func getVarAndCollectionName(f *File, node ast.Node) {
 	call := node.(*ast.CallExpr)
-	fmt.Println("====  getVarAndCollectionName  ======= ", call.Fun)
+	fmt.Println("====  getVarAndCollectionName  ======= ")
 	if !isFuncC(f, call) {
 		return // the function call is not related to this check.
 	}
-	fmt.Println("Found it@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-
 	finder := &blockStmtFinder{node: call}
 	ast.Walk(finder, f.file)
 	stmts := finder.stmts()
@@ -64,11 +62,18 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 	// *ast.AssignStmt
 	// which may be a direct call to
 	// err := collection.Find(bson.M{"name": blotterID}).One(&ret)
-	w, ok := stmts[1].(*ast.ExprStmt)
-	if !ok {
-		return
+
+	for _, row := range stmts {
+		fmt.Printf("row is : %+v\n", row)
 	}
-	fmt.Printf("here %+v\n", w.X)
+	/*
+			w, ok := stmts[1].(*ast.ExprStmt)
+			if !ok {
+				return
+			}
+
+		fmt.Printf("here %+v\n", w.X)
+	*/
 	collectionVar := rootIdent(asg.Lhs[0])
 	fmt.Printf("Boom %+v\n", collectionVar)
 	if collectionVar == nil {
@@ -85,13 +90,16 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 	// to account for files with same var name but diff scopes
 
 	for _, row := range stmts {
+		fmt.Printf("row0 : %+v\n", row)
 		usage, ok := row.(*ast.ExprStmt)
 		if ok {
 			tpe := types.NewPointer(importType("gopkg.in/mgo.v2", "Collection"))
 			// using types.IdenticalIgnoreTags keeps returning false here
+			fmt.Printf("row1 : %+v\n", f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String())
 			if f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String() == tpe.String() {
 				x, ok := usage.X.(*ast.CallExpr).Fun.(*ast.Ident)
 				if ok {
+					fmt.Printf("row2 : %+v\n", collName.Value)
 					//useful info for a line like:
 					//findByZip(companyColl, "diego")
 					//x.Obj.Decl.(*ast.FuncDecl).Type.Params.List[0].Type
@@ -330,6 +338,7 @@ func (f *File) Visit(node ast.Node) ast.Visitor {
 	case *ast.FuncDecl:
 		err := findFnUsingCollection(f, node)
 		if err != nil {
+			fmt.Println("                                                                                                               Error found.")
 			fmt.Println(err)
 			return nil
 		}
@@ -361,6 +370,7 @@ func (f *File) Visit(node ast.Node) ast.Visitor {
 
 func findFnUsingCollection(f *File, node ast.Node) *ErrTypeInfo {
 	if n, ok := node.(*ast.FuncDecl); ok {
+		fmt.Printf("										func found: %+v\n", n.Name)
 		if collName, ok := f.funcUsingCollection[f.pkg.path+"."+n.Name.Name]; ok {
 			fmt.Printf("Found matching fn: %s using collection: %+v\n", n.Name.Name, collName)
 			for _, stmt := range n.Body.List {
