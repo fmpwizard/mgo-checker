@@ -6,7 +6,6 @@ import (
 	"go/importer"
 	"go/token"
 	"go/types"
-	"gopkg.in/mgo.v2"
 	"os"
 	"reflect"
 	"strings"
@@ -31,9 +30,6 @@ var (
 	rangeStmt     *ast.RangeStmt
 	returnStmt    *ast.ReturnStmt
 	structType    *ast.StructType
-
-	//Used to compare types
-	mgoCollection *mgo.Collection
 )
 
 func init() {
@@ -403,6 +399,13 @@ func detectWrongTypeForField(f *File, stmt ast.Stmt, collectionName string) *Err
 		if ret != nil {
 			return ret
 		}
+	} else if n, ok := stmt.(*ast.ReturnStmt); ok {
+		for _, r := range n.Results {
+			ret := detectWrongTypeForFieldInsideCallExpr(f, r, collectionName)
+			if ret != nil {
+				return ret
+			}
+		}
 	}
 	return nil
 }
@@ -431,7 +434,7 @@ func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionN
 								}
 
 								expectedType := collFieldTypes[k]
-								pos := f.fset.Position(keyValue.Pos())
+								pos := f.fset.Position(keyValue.Value.Pos())
 								//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< actualType: %+v\n", actualType)
 								//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< expectedType: %+v\n", expectedType)
 

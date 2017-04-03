@@ -30,8 +30,14 @@ func connect() *mgo.Session {
 
 func findByName(name string) {
 	var ret []Company
-	testCollection := connect().DB("dbname").C("xyz_company")
-	testCollection.Find(bson.M{"name": 1}).All(&ret)
+	testCollection1 := connect().DB("dbname").C("xyz_company")
+	testCollection1.Find(bson.M{"name": 1}).All(&ret)
+}
+
+func findByNameAndReturn(name string) error {
+	var ret []Company
+	testCollection2 := connect().DB("dbname").C("xyz_company")
+	return testCollection2.Find(bson.M{"name": 1}).All(&ret)
 }
 
 func findByZip(collection *mgo.Collection, n int64) {
