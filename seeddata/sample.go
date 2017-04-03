@@ -40,6 +40,7 @@ func findByZip(collection *mgo.Collection, n int64) {
 	_ = err
 }
 
+/*
 func findTradeBlotter(session *mgo.Session, blotterID bson.ObjectId) error {
 	_session := session.Copy()
 	defer _session.Close()
@@ -51,3 +52,4 @@ func findTradeBlotter(session *mgo.Session, blotterID bson.ObjectId) error {
 	}
 	return nil
 }
+*/

@@ -42,11 +42,12 @@ func init() {
 }
 
 func getVarAndCollectionName(f *File, node ast.Node) {
-	fmt.Println("====  getVarAndCollectionName  =======")
 	call := node.(*ast.CallExpr)
+	fmt.Println("====  getVarAndCollectionName  ======= ", call.Fun)
 	if !isFuncC(f, call) {
 		return // the function call is not related to this check.
 	}
+	fmt.Println("Found it@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
 
 	finder := &blockStmtFinder{node: call}
 	ast.Walk(finder, f.file)
@@ -133,7 +134,8 @@ func isFuncC(f *File, expr *ast.CallExpr) bool {
 	if res.Len() != 1 {
 		return false // the function called does not return one value.
 	}
-	//fmt.Println("1111 ", res.At(0).Type().String()) //*gopkg.in/mgo.v2.Collection when it is good
+
+	fmt.Println("1111 ", res.At(0).Type().String()) //*gopkg.in/mgo.v2.Collection when it is good
 	if res.At(0).Type().String() == "*gopkg.in/mgo.v2.Collection" {
 		fmt.Println("found C func")
 		return true
