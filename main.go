@@ -42,18 +42,6 @@ func (e ErrTypeInfo) String() string {
 	)
 }
 
-var errorFound *ErrTypeInfo
-
-//This will need a mutex
-var collectionsMap = make(map[string]string)
-var collectionsVarToNameMap = make(map[string]string)
-var currentKey = ""
-
-//var structTocollection = make(map[string]string)
-
-// "collection.field = string | int | bson.ObjectId"
-var collFieldTypes = make(map[string]string)
-
 var info = types.Info{
 	Types:      make(map[ast.Expr]types.TypeAndValue),
 	Defs:       make(map[*ast.Ident]types.Object),
@@ -68,62 +56,58 @@ func main() {
 	dirPath := flag.String("dir-path", "", "specify the path to the folder with go files to check")
 	//debug := flag.Bool("debug", false, "print extra debug information")
 	flag.Parse()
-	files, err := ioutil.ReadDir(*dirPath)
+	filesInfo, err := ioutil.ReadDir(*dirPath)
+	var fileNames []string
+	for _, v := range filesInfo {
+		fileNames = append(fileNames, v.Name())
+	}
 	if err != nil {
 		fmt.Println("faile to read dir ", err)
 		os.Exit(1)
 	}
-	doPackage(*dirPath, files)
-	/*
-		files, fset, _ := initChecker(*dirPath)
-		for _, f := range files {
-			visitor := &printASTVisitor{
-				info: &info,
-				fset: fset,
-			}
-			ast.Walk(visitor, f)
-			if errorFound != nil {
-				fmt.Println(errorFound)
-			}
-		}
-		if *debug {
-			typeReport()
-		}
-	*/
+	files, astFiles, fset := genASTFilesAndFileWrapper(*dirPath, fileNames)
+	ret := doPackage(files, astFiles, fset)
+	for _, v := range ret.errors {
+		fmt.Println(v)
+	}
 }
 
-// doPackage analyzes the single package constructed from the named files.
-// It returns the parsed Package or nil if none of the files have been checked.
-func doPackage(basePath string, names []os.FileInfo) *Package {
-
+func genASTFilesAndFileWrapper(basePath string, fileNames []string) ([]*File, []*ast.File, *token.FileSet) {
 	var files []*File
 	var astFiles []*ast.File
 	var funcUsingCollection = make(map[string]string, 0)
 	fs := token.NewFileSet()
-	for _, name := range names {
-		data, err := ioutil.ReadFile(basePath + "/" + name.Name())
+	for _, name := range fileNames {
+		data, err := ioutil.ReadFile(basePath + "/" + name)
 		if err != nil {
 			// Warn but continue to next package.
-			fmt.Printf("1 %s: %s", basePath+"/"+name.Name(), err)
-			return nil
+			fmt.Printf("1 %s: %s", basePath+"/"+name, err)
+			return nil, nil, fs
 		}
 		var parsedFile *ast.File
-		if strings.HasSuffix(name.Name(), ".go") {
-			parsedFile, err = parser.ParseFile(fs, name.Name(), data, parser.ParseComments)
+		if strings.HasSuffix(name, ".go") {
+			parsedFile, err = parser.ParseFile(fs, name, data, parser.ParseComments)
 			if err != nil {
 				fmt.Printf("%s: %s", name, err)
-				return nil
+				return nil, nil, fs
 			}
 			astFiles = append(astFiles, parsedFile)
 		}
 		files = append(files, &File{
 			fset:                fs,
 			content:             data,
-			name:                name.Name(),
+			name:                name,
 			file:                parsedFile,
 			funcUsingCollection: funcUsingCollection,
 		})
 	}
+	return files, astFiles, fs
+}
+
+// doPackage analyzes the single package constructed from the named files.
+// It returns the parsed Package or nil if none of the files have been checked.
+func doPackage(files []*File, astFiles []*ast.File, fset *token.FileSet) *Package {
+
 	if len(astFiles) == 0 {
 		return nil
 	}
@@ -134,6 +118,7 @@ func doPackage(basePath string, names []os.FileInfo) *Package {
 	pkg.defs = info.Defs
 	pkg.selectors = info.Selections
 	pkg.uses = info.Uses
+	pkg.collFieldTypes = make(map[string]string)
 	// Type check the package.
 	conf := &types.Config{
 		Error: func(e error) {
@@ -141,33 +126,20 @@ func doPackage(basePath string, names []os.FileInfo) *Package {
 		},
 		Importer: importer.Default(),
 	}
-	_, err := conf.Check(pkg.path, fs, astFiles, &info)
+	_, err := conf.Check(pkg.path, fset, astFiles, &info)
 	if err != nil {
 		fmt.Printf("%s", err)
 		os.Exit(1)
 	}
 
-	// Check.
-	/*
-		chk := make(map[ast.Node][]func(*File, ast.Node))
-		for typ, set := range checkers {
-			for name, fn := range set {
-				if vet(name) {
-					chk[typ] = append(chk[typ], fn)
-				}
-			}
-		}
-	*/
 	for _, file := range files {
 		file.pkg = pkg
-		//file.basePkg = basePkg
-		//file.checkers = chk
 		if file.file != nil {
 			file.walkFile(file.name, file.file)
 		}
 	}
 	fmt.Println("results:")
-	for k, v := range collFieldTypes {
+	for k, v := range pkg.collFieldTypes {
 		fmt.Printf("k: %s, v: %s\n", k, v)
 	}
 

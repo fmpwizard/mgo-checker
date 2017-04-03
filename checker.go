@@ -86,8 +86,7 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 		fmt.Printf("row0 : %+v\n", row)
 		ret := detectWrongTypeForField(f, row, collName.Value)
 		if ret != nil {
-			fmt.Println("Found another!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-			fmt.Println(ret)
+			f.pkg.errors = append(f.pkg.errors, ret)
 		}
 		usage, ok := row.(*ast.ExprStmt)
 		if ok {
@@ -229,7 +228,12 @@ type Package struct {
 	selectors map[*ast.SelectorExpr]*types.Selection
 	types     map[ast.Expr]types.TypeAndValue
 	//spans     map[types.Object]Span
-	files []*File
+	files  []*File
+	errors []*ErrTypeInfo
+
+	// "collection.field = string | int | bson.ObjectId"
+	collFieldTypes map[string]string
+
 	//typesPkg  *types.Package
 }
 
@@ -336,8 +340,7 @@ func (f *File) Visit(node ast.Node) ast.Visitor {
 	case *ast.FuncDecl:
 		err := findFnUsingCollection(f, node)
 		if err != nil {
-			fmt.Println("                                                                                                               Error found.")
-			fmt.Println(err)
+			f.pkg.errors = append(f.pkg.errors, err)
 			return nil
 		}
 		/*
@@ -433,13 +436,13 @@ func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionN
 									actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
 								}
 
-								expectedType := collFieldTypes[k]
+								expectedType := f.pkg.collFieldTypes[k]
 								pos := f.fset.Position(keyValue.Value.Pos())
 								//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< actualType: %+v\n", actualType)
 								//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< expectedType: %+v\n", expectedType)
 
 								if expectedType != actualType {
-									errorFound = &ErrTypeInfo{
+									errorFound := &ErrTypeInfo{
 										Expected: expectedType,
 										Actual:   actualType,
 										Filename: pos.Filename,
@@ -448,9 +451,6 @@ func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionN
 									}
 									return errorFound
 								}
-
-								//fmt.Println("key: ", k)
-								//fmt.Println("map type collFieldTypes ", collFieldTypes[k])
 							}
 						}
 					}
@@ -459,20 +459,6 @@ func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionN
 		}
 	}
 	return nil
-}
-
-func getCollectionNameIThink(f *File, node ast.Node) {
-	if n, ok := node.(*ast.Ident); ok {
-		if n.Obj != nil {
-			switch info.ObjectOf(n).Type().String() {
-			case "*gopkg.in/mgo.v2.Collection":
-				collectionsMap[info.ObjectOf(n).Id()] = info.ObjectOf(n).Type().String()
-				currentKey = info.ObjectOf(n).Id()
-				fmt.Println("here is 1: ", info.ObjectOf(n).Id())
-				fmt.Println("here is 2: ", info.ObjectOf(n).Type().String())
-			}
-		}
-	}
 }
 
 func getFieldNameToTypeMap(f *File, node ast.Node) {
@@ -488,10 +474,10 @@ func getFieldNameToTypeMap(f *File, node ast.Node) {
 					if cleanFieldName == "" {
 						for _, name := range field.Names {
 							cleanFieldName = strings.ToLower(name.Name)
-							collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = info.TypeOf(field.Type).String()
+							f.pkg.collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = info.TypeOf(field.Type).String()
 						}
 					} else {
-						collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = info.TypeOf(field.Type).String()
+						f.pkg.collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = info.TypeOf(field.Type).String()
 					}
 				}
 			}

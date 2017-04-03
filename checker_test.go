@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"go/ast"
+	"go/parser"
+	"go/token"
 	"testing"
 )
 
@@ -228,12 +231,35 @@ func findByName(name string) {
 }
 `
 
+func initTestWrappers(filename string, data []byte) ([]*File, []*ast.File, *token.FileSet) {
+	var files []*File
+	var astFiles []*ast.File
+	names := []string{filename}
+	var funcUsingCollection = make(map[string]string, 0)
+	fs := token.NewFileSet()
+	for _, name := range names {
+		parsedFile, err := parser.ParseFile(fs, name, data, parser.ParseComments)
+		if err != nil {
+			fmt.Printf("%s: %s", name, err)
+			return nil, nil, fs
+		}
+		astFiles = append(astFiles, parsedFile)
+
+		files = append(files, &File{
+			fset:                fs,
+			content:             data,
+			name:                name,
+			file:                parsedFile,
+			funcUsingCollection: funcUsingCollection,
+		})
+	}
+	return files, astFiles, fs
+}
+
 func TestExpectStrGotInt(t *testing.T) {
-	errorFound = nil
-	collFieldTypes = make(map[string]string)
-	files := initCheckerSingleFile("sample1.go", "seeddata", src1)
-	for _, f := range files {
-		ast.Walk(&printASTVisitor{&info}, f)
+	files, astFiles, fset := initTestWrappers("sample1.go", []byte(src1))
+	ret := doPackage(files, astFiles, fset)
+	for _, errorFound := range ret.errors {
 		if errorFound.Actual != "int" {
 			t.Errorf("actual: %s, expected: %s", errorFound.Actual, errorFound.Expected)
 		}
@@ -241,11 +267,9 @@ func TestExpectStrGotInt(t *testing.T) {
 }
 
 func TestWrongFieldName(t *testing.T) {
-	errorFound = nil
-	collFieldTypes = make(map[string]string)
-	files := initCheckerSingleFile("sample2.go", "seeddata", src2)
-	for _, f := range files {
-		ast.Walk(&printASTVisitor{&info}, f)
+	files, astFiles, fset := initTestWrappers("sample2.go", []byte(src2))
+	ret := doPackage(files, astFiles, fset)
+	for _, errorFound := range ret.errors {
 		if errorFound.Expected != "" {
 			t.Errorf("actual: %s, expected: %s", errorFound.Actual, errorFound.Expected)
 		}
@@ -313,77 +337,53 @@ func TestFieldFromTag7(t *testing.T) {
 }
 
 func TestReadStructDirective1(t *testing.T) {
-	errorFound = nil
-	collFieldTypes = make(map[string]string)
-	files := initCheckerSingleFile("sample3.go", "seeddata", src3)
-	for _, f := range files {
-		ast.Walk(&printASTVisitor{&info}, f)
-		//the logging only happens on a fail test
-		for k, v := range collFieldTypes {
-			t.Logf("%s: %s\n", k, v)
-		}
-		if len(collFieldTypes) != 4 {
-			t.Errorf("found: %d, expected: %d mongodb fields detected", len(collFieldTypes), 4)
-		}
-		if ret := collFieldTypes["\"xyz_company\".\"name\""]; ret != "string" {
-			t.Errorf("found %q instead of \"string\"", ret)
-		}
+	files, astFiles, fset := initTestWrappers("sample3.go", []byte(src3))
+	ret := doPackage(files, astFiles, fset)
+	if len(ret.collFieldTypes) != 4 {
+		t.Errorf("found: %d, expected: %d mongodb fields detected", len(ret.collFieldTypes), 4)
+	}
+	if r := ret.collFieldTypes["\"xyz_company\".\"name\""]; r != "string" {
+		t.Errorf("found %q instead of \"string\"", r)
 	}
 }
 
 func TestReadStructDirective2(t *testing.T) {
-	errorFound = nil
-	collFieldTypes = make(map[string]string)
-	files := initCheckerSingleFile("sample4.go", "seeddata", src4)
-	for _, f := range files {
-		ast.Walk(&printASTVisitor{&info}, f)
-		//the logging only happens on a fail test
-		for k, v := range collFieldTypes {
-			t.Logf("%s: %s\n", k, v)
-		}
-		if len(collFieldTypes) != 3 {
-			t.Errorf("found: %d, expected: %d mongodb fields detected", len(collFieldTypes), 3)
-		}
-		if ret := collFieldTypes["\"xyz_company\".\"name\""]; ret != "string" {
-			t.Errorf("wrong name field type. Found %q instead of \"string\"", ret)
-		}
-		if ret := collFieldTypes["\"xyz_company\".\"street\""]; ret != "string" {
-			t.Errorf("wrong street field type. Found %q instead of \"string\"", ret)
-		}
+	files, astFiles, fset := initTestWrappers("sample4.go", []byte(src4))
+	ret := doPackage(files, astFiles, fset)
+
+	if len(ret.collFieldTypes) != 3 {
+		t.Errorf("found: %d, expected: %d mongodb fields detected", len(ret.collFieldTypes), 3)
+	}
+	if r := ret.collFieldTypes["\"xyz_company\".\"name\""]; r != "string" {
+		t.Errorf("wrong name field type. Found %q instead of \"string\"", r)
+	}
+	if r := ret.collFieldTypes["\"xyz_company\".\"street\""]; r != "string" {
+		t.Errorf("wrong street field type. Found %q instead of \"string\"", r)
 	}
 }
+
 func TestReadStructDirectiveTag(t *testing.T) {
-	t.SkipNow()
-	errorFound = nil
-	collFieldTypes = make(map[string]string)
-	files := initCheckerSingleFile("sample5.go", "seeddata", src5)
-	for _, f := range files {
-		ast.Walk(&printASTVisitor{&info}, f)
-		//the logging only happens on a fail test
-		for k, v := range collFieldTypes {
-			t.Logf("%s: %s\n", k, v)
-		}
-		if len(collFieldTypes) != 3 {
-			t.Errorf("found: %d, expected: %d mongodb fields detected", len(collFieldTypes), 3)
-		}
-		if ret := collFieldTypes["\"xyz_company\".\"zip_code\""]; ret != "string" {
-			t.Errorf("wrong zip_code field type. Found %q instead of \"string\"", ret)
-		}
-		if ret := collFieldTypes["\"xyz_company\".\"name\""]; ret != "string" {
-			t.Errorf("wrong name field type. Found %q instead of \"string\"", ret)
-		}
-		if ret := collFieldTypes["\"xyz_company\".\"street\""]; ret != "string" {
-			t.Errorf("wrong street field type. Found %q instead of \"string\"", ret)
-		}
+	files, astFiles, fset := initTestWrappers("sample5.go", []byte(src5))
+	r := doPackage(files, astFiles, fset)
+
+	if len(r.collFieldTypes) != 3 {
+		t.Errorf("found: %d, expected: %d mongodb fields detected", len(r.collFieldTypes), 3)
+	}
+	if ret := r.collFieldTypes["\"xyz_company\".\"zip_code\""]; ret != "string" {
+		t.Errorf("wrong zip_code field type. Found %q instead of \"string\"", ret)
+	}
+	if ret := r.collFieldTypes["\"xyz_company\".\"name\""]; ret != "string" {
+		t.Errorf("wrong name field type. Found %q instead of \"string\"", ret)
+	}
+	if ret := r.collFieldTypes["\"xyz_company\".\"street\""]; ret != "string" {
+		t.Errorf("wrong street field type. Found %q instead of \"string\"", ret)
 	}
 }
 
 func TestExpectStrGotIntMultiItemMap1(t *testing.T) {
-	errorFound = nil
-	collFieldTypes = make(map[string]string)
-	files := initCheckerSingleFile("sample6.go", "seeddata", src6)
-	for _, f := range files {
-		ast.Walk(&printASTVisitor{&info}, f)
+	files, astFiles, fset := initTestWrappers("sample6.go", []byte(src6))
+	r := doPackage(files, astFiles, fset)
+	for _, errorFound := range r.errors {
 		if errorFound.Actual != "int" {
 			t.Errorf("actual: %s, expected: %s", errorFound.Actual, errorFound.Expected)
 		}
@@ -391,13 +391,11 @@ func TestExpectStrGotIntMultiItemMap1(t *testing.T) {
 }
 
 func TestExpectStrGotIntMultiItemMap2(t *testing.T) {
-	errorFound = nil
-	collFieldTypes = make(map[string]string)
-	files := initCheckerSingleFile("sample7.go", "seeddata", src7)
-	for _, f := range files {
-		ast.Walk(&printASTVisitor{&info}, f)
+	files, astFiles, fset := initTestWrappers("sample7.go", []byte(src7))
+	r := doPackage(files, astFiles, fset)
+	for _, errorFound := range r.errors {
 		if errorFound.Expected != "" {
-			t.Errorf("actual: %s, expected: %+v", errorFound.Actual, errorFound)
+			t.Errorf("actual: %s, expected: %+v", errorFound.Actual, errorFound.Expected)
 		}
 	}
 }
