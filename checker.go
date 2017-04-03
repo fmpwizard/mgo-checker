@@ -52,6 +52,7 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 	stmts := finder.stmts()
 	for _, v := range stmts {
 		fmt.Printf("f %+v\n", reflect.TypeOf(v))
+		fmt.Printf("row is : %+v\n", v)
 	}
 	asg, ok := stmts[0].(*ast.AssignStmt)
 	if !ok {
@@ -63,9 +64,6 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 	// which may be a direct call to
 	// err := collection.Find(bson.M{"name": blotterID}).One(&ret)
 
-	for _, row := range stmts {
-		fmt.Printf("row is : %+v\n", row)
-	}
 	/*
 			w, ok := stmts[1].(*ast.ExprStmt)
 			if !ok {
@@ -84,11 +82,10 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 	if !ok {
 		return
 	}
-	fmt.Printf("row : %+v\n", collName.Value)
+	fmt.Printf("Found collection name: %+v\n", collName.Value)
 	// go install && mgo-checker -dir-path=seeddata
 	// and see how to best store the var => colletion name values/
 	// to account for files with same var name but diff scopes
-	findStmtUsingCollection(f, stmts, collName.Value)
 	for _, row := range stmts {
 		fmt.Printf("row0 : %+v\n", row)
 		ret := detectWrongTypeForField(f, row, collName.Value)
@@ -111,16 +108,6 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 					f.funcUsingCollection[f.pkg.path+"."+x.Name] = collName.Value
 				}
 			}
-		}
-	}
-}
-
-func findStmtUsingCollection(f *File, stmts []ast.Stmt, collectionName string) {
-	for _, row := range stmts {
-		fmt.Printf("			reflect: %+v\n", reflect.TypeOf(row))
-		fmt.Printf("			row0 : %+v\n", row)
-		if n, ok := row.(*ast.AssignStmt); ok {
-			fmt.Printf("have: %+v\n", n.Lhs) //diego
 		}
 	}
 }
@@ -404,51 +391,63 @@ func findFnUsingCollection(f *File, node ast.Node) *ErrTypeInfo {
 	return nil
 }
 func detectWrongTypeForField(f *File, stmt ast.Stmt, collectionName string) *ErrTypeInfo {
-	if exp, ok := stmt.(*ast.AssignStmt); ok { //diego
+	if exp, ok := stmt.(*ast.AssignStmt); ok {
 		for _, assign := range exp.Rhs {
-			//fmt.Printf("							1 assign: %+v\n", assign)
-			if callExp, ok := assign.(*ast.CallExpr); ok {
-				if fn, ok := callExp.Fun.(*ast.SelectorExpr); ok {
-					//fmt.Printf(" ================>>>>>>>>>>>> Fun1: %+v\n", fn.X)
-					if a, ok := fn.X.(*ast.CallExpr); ok {
-						for _, b := range a.Args {
-							if c, ok := b.(*ast.CompositeLit); ok {
-								for _, d := range c.Elts {
-									if keyValue, ok := d.(*ast.KeyValueExpr); ok {
-										k := collectionName
-										actualType := ""
-										if mongoFieldNameUsedInMapQuery, ok := keyValue.Key.(*ast.BasicLit); ok {
-											k = k + "." + mongoFieldNameUsedInMapQuery.Value
-										}
-										//value is a literal value, not a variable
-										if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.BasicLit); ok {
-											actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
-										}
-										//valule is a variable
-										if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.Ident); ok {
-											actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
-										}
+			ret := detectWrongTypeForFieldInsideCallExpr(f, assign, collectionName)
+			if ret != nil {
+				return ret
+			}
+		}
+	} else if n, ok := stmt.(*ast.ExprStmt); ok {
+		ret := detectWrongTypeForFieldInsideCallExpr(f, n.X, collectionName)
+		if ret != nil {
+			return ret
+		}
+	}
+	return nil
+}
 
-										expectedType := collFieldTypes[k]
-										pos := f.fset.Position(keyValue.Pos())
-										//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< actualType: %+v\n", actualType)
-										//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< expectedType: %+v\n", expectedType)
-
-										if expectedType != actualType {
-											errorFound = &ErrTypeInfo{
-												Expected: expectedType,
-												Actual:   actualType,
-												Filename: pos.Filename,
-												Column:   pos.Column,
-												Line:     pos.Line,
-											}
-											return errorFound
-										}
-
-										//fmt.Println("key: ", k)
-										//fmt.Println("map type collFieldTypes ", collFieldTypes[k])
-									}
+func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionName string) *ErrTypeInfo {
+	if callExp, ok := assign.(*ast.CallExpr); ok {
+		if fn, ok := callExp.Fun.(*ast.SelectorExpr); ok {
+			//fmt.Printf(" ================>>>>>>>>>>>> Fun1: %+v\n", fn.X)
+			if a, ok := fn.X.(*ast.CallExpr); ok {
+				for _, b := range a.Args {
+					if c, ok := b.(*ast.CompositeLit); ok {
+						for _, d := range c.Elts {
+							if keyValue, ok := d.(*ast.KeyValueExpr); ok {
+								k := collectionName
+								actualType := ""
+								if mongoFieldNameUsedInMapQuery, ok := keyValue.Key.(*ast.BasicLit); ok {
+									k = k + "." + mongoFieldNameUsedInMapQuery.Value
 								}
+								//value is a literal value, not a variable
+								if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.BasicLit); ok {
+									actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
+								}
+								//valule is a variable
+								if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.Ident); ok {
+									actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
+								}
+
+								expectedType := collFieldTypes[k]
+								pos := f.fset.Position(keyValue.Pos())
+								//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< actualType: %+v\n", actualType)
+								//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< expectedType: %+v\n", expectedType)
+
+								if expectedType != actualType {
+									errorFound = &ErrTypeInfo{
+										Expected: expectedType,
+										Actual:   actualType,
+										Filename: pos.Filename,
+										Column:   pos.Column,
+										Line:     pos.Line,
+									}
+									return errorFound
+								}
+
+								//fmt.Println("key: ", k)
+								//fmt.Println("map type collFieldTypes ", collFieldTypes[k])
 							}
 						}
 					}
@@ -460,7 +459,6 @@ func detectWrongTypeForField(f *File, stmt ast.Stmt, collectionName string) *Err
 }
 
 func getCollectionNameIThink(f *File, node ast.Node) {
-
 	if n, ok := node.(*ast.Ident); ok {
 		if n.Obj != nil {
 			switch info.ObjectOf(n).Type().String() {
