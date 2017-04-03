@@ -8,6 +8,7 @@ import (
 	"go/types"
 	"gopkg.in/mgo.v2"
 	"os"
+	"reflect"
 	"strings"
 )
 
@@ -41,7 +42,7 @@ func init() {
 }
 
 func getVarAndCollectionName(f *File, node ast.Node) {
-	fmt.Println("ssssssssss")
+	fmt.Println("====  getVarAndCollectionName  =======")
 	call := node.(*ast.CallExpr)
 	if !isFuncC(f, call) {
 		return // the function call is not related to this check.
@@ -50,11 +51,18 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 	finder := &blockStmtFinder{node: call}
 	ast.Walk(finder, f.file)
 	stmts := finder.stmts()
+	for _, v := range stmts {
+		fmt.Printf("f %+v\n", reflect.TypeOf(v))
+	}
 	asg, ok := stmts[0].(*ast.AssignStmt)
 	if !ok {
 		return // the first statement is not assignment.
 	}
-
+	fmt.Println("//////////////////////////////////")
+	// as alternative, walk all stmts and find
+	// *ast.AssignStmt
+	// which may be a direct call to
+	// err := collection.Find(bson.M{"name": blotterID}).One(&ret)
 	w, ok := stmts[1].(*ast.ExprStmt)
 	if !ok {
 		return
@@ -122,15 +130,15 @@ func isFuncC(f *File, expr *ast.CallExpr) bool {
 	}
 
 	res := sig.Results()
-
+	if res.Len() != 1 {
+		return false // the function called does not return one value.
+	}
 	fmt.Println("1111 ", res.At(0).Type().String()) //*gopkg.in/mgo.v2.Collection when it is good
 	if res.At(0).Type().String() == "*gopkg.in/mgo.v2.Collection" {
 		fmt.Println("found C func")
 		return true
 	}
-	if res.Len() != 2 {
-		return false // the function called does not return two values.
-	}
+
 	if ptr, ok := res.At(0).Type().(*types.Pointer); !ok || !types.Identical(ptr.Elem(), httpResponseType) {
 		return false // the first return type is not *http.Response.
 	}
@@ -223,15 +231,16 @@ type File struct {
 	//checkers map[ast.Node][]func(*File, ast.Node)
 }
 
+// Package holds information for the current Go package we are processing
 type Package struct {
 	path      string
 	defs      map[*ast.Ident]types.Object
 	uses      map[*ast.Ident]types.Object
 	selectors map[*ast.SelectorExpr]*types.Selection
 	types     map[ast.Expr]types.TypeAndValue
-	spans     map[types.Object]Span
-	files     []*File
-	typesPkg  *types.Package
+	//spans     map[types.Object]Span
+	files []*File
+	//typesPkg  *types.Package
 }
 
 // Span stores the minimum range of byte positions in the file in which a
@@ -255,8 +264,8 @@ type Package struct {
 // as shadowing a variable in the outer function.
 //
 type Span struct {
-	min token.Pos
-	max token.Pos
+	//min token.Pos
+	//max token.Pos
 }
 
 // setExit sets the value for os.Exit when it is called, later. It
@@ -468,57 +477,6 @@ func getFieldNameToTypeMap(f *File, node ast.Node) {
 			}
 		}
 	}
-}
-
-/*
-// gofmt returns a string representation of the expression.
-func (f *File) gofmt(x ast.Expr) string {
-	f.b.Reset()
-	printer.Fprint(&f.b, f.fset, x)
-	return f.b.String()
-}
-*/
-
-func getQueryFieldsInfo(node ast.Node) *ErrTypeInfo {
-
-	/* Diego: fix this
-	if node != nil {
-
-		switch n := node.(type) {
-		case *ast.KeyValueExpr:
-			varName := "" // diego fix this  pckg.Scope().Innermost(node.Pos()).Lookup("testCollection").Id()
-			if collectionName, ok := collectionsVarToNameMap[varName]; ok {
-				collFieldTypeKey := collectionName + "." + n.Key.(*ast.BasicLit).Value
-				expectedType := collFieldTypes[collFieldTypeKey]
-				actualType := info.TypeOf(n.Value).String()
-				//diego fix this
-
-				pos := fset.Position(n.Key.Pos())
-
-				if expectedType != actualType {
-					errorFound = &ErrTypeInfo{
-						Expected: expectedType,
-						Actual:   actualType,
-						Filename: pos.Filename,
-						Column:   pos.Column,
-						Line:     pos.Line,
-					}
-					return errorFound
-				}
-
-			}
-
-		case *ast.CompositeLit:
-			for _, row := range n.Elts {
-				fmt.Println("22222222222222222222")
-				if ret := getQueryFieldsInfo(row); ret != nil {
-					return ret
-				}
-			}
-		}
-	}
-	*/
-	return nil
 }
 
 func getMgoCollectionFromComment(s string) (bool, string) {

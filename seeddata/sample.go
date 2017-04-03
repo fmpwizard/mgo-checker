@@ -36,6 +36,18 @@ func findByName(name string) {
 
 func findByZip(collection *mgo.Collection, n int64) {
 	var ret []Company
-	err := collection.Find(bson.M{"name": n}).All(&ret)
+	err := collection.Find(bson.M{"name": "n"}).All(&ret)
 	_ = err
+}
+
+func findTradeBlotter(session *mgo.Session, blotterID bson.ObjectId) error {
+	_session := session.Copy()
+	defer _session.Close()
+	collection := _session.DB("acm-web").C("xyz_company")
+	var ret []Company
+	err := collection.Find(bson.M{"name": blotterID}).One(&ret)
+	if err != nil {
+		return nil
+	}
+	return nil
 }
