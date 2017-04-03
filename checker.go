@@ -133,30 +133,12 @@ func isFuncC(f *File, expr *ast.CallExpr) bool {
 	if res.Len() != 1 {
 		return false // the function called does not return one value.
 	}
-	fmt.Println("1111 ", res.At(0).Type().String()) //*gopkg.in/mgo.v2.Collection when it is good
+	//fmt.Println("1111 ", res.At(0).Type().String()) //*gopkg.in/mgo.v2.Collection when it is good
 	if res.At(0).Type().String() == "*gopkg.in/mgo.v2.Collection" {
 		fmt.Println("found C func")
 		return true
 	}
-
-	if ptr, ok := res.At(0).Type().(*types.Pointer); !ok || !types.Identical(ptr.Elem(), httpResponseType) {
-		return false // the first return type is not *http.Response.
-	}
-	if !types.Identical(res.At(1).Type().Underlying(), errorType) {
-		return false // the second return type is not error
-	}
-
-	typ := f.pkg.types[fun.X].Type
-	if typ == nil {
-		id, ok := fun.X.(*ast.Ident)
-		return ok && id.Name == "http" // function in net/http package.
-	}
-
-	if types.Identical(typ, httpClientType) {
-		return true // method on http.Client.
-	}
-	ptr, ok := typ.(*types.Pointer)
-	return ok && types.Identical(ptr.Elem(), httpClientType) // method on *http.Client.
+	return false
 }
 
 // blockStmtFinder is an ast.Visitor that given any ast node can find the

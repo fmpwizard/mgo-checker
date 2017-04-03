@@ -36,7 +36,7 @@ func findByName(name string) {
 
 func findByZip(collection *mgo.Collection, n int64) {
 	var ret []Company
-	err := collection.Find(bson.M{"name": "n"}).All(&ret)
+	err := collection.Find(bson.M{"name": n}).All(&ret)
 	_ = err
 }
 
