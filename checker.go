@@ -88,9 +88,14 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 	// go install && mgo-checker -dir-path=seeddata
 	// and see how to best store the var => colletion name values/
 	// to account for files with same var name but diff scopes
-
+	findStmtUsingCollection(f, stmts, collName.Value)
 	for _, row := range stmts {
 		fmt.Printf("row0 : %+v\n", row)
+		ret := detectWrongTypeForField(f, row, collName.Value)
+		if ret != nil {
+			fmt.Println("Found another!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+			fmt.Println(ret)
+		}
 		usage, ok := row.(*ast.ExprStmt)
 		if ok {
 			tpe := types.NewPointer(importType("gopkg.in/mgo.v2", "Collection"))
@@ -106,6 +111,16 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 					f.funcUsingCollection[f.pkg.path+"."+x.Name] = collName.Value
 				}
 			}
+		}
+	}
+}
+
+func findStmtUsingCollection(f *File, stmts []ast.Stmt, collectionName string) {
+	for _, row := range stmts {
+		fmt.Printf("			reflect: %+v\n", reflect.TypeOf(row))
+		fmt.Printf("			row0 : %+v\n", row)
+		if n, ok := row.(*ast.AssignStmt); ok {
+			fmt.Printf("have: %+v\n", n.Lhs) //diego
 		}
 	}
 }
@@ -370,58 +385,68 @@ func (f *File) Visit(node ast.Node) ast.Visitor {
 
 func findFnUsingCollection(f *File, node ast.Node) *ErrTypeInfo {
 	if n, ok := node.(*ast.FuncDecl); ok {
-		fmt.Printf("										func found: %+v\n", n.Name)
-		if collName, ok := f.funcUsingCollection[f.pkg.path+"."+n.Name.Name]; ok {
-			fmt.Printf("Found matching fn: %s using collection: %+v\n", n.Name.Name, collName)
+		if collectionName, ok := f.funcUsingCollection[f.pkg.path+"."+n.Name.Name]; ok {
+			//fmt.Printf("										Found matching fn: %s using collection: %+v\n", n.Name.Name, collectionName)
 			for _, stmt := range n.Body.List {
 				//fmt.Printf("stmt: %+v\n", stmt)
 				if exp, ok := stmt.(*ast.ExprStmt); ok {
 					fmt.Printf("expStmt %+v\n", exp.X)
 				}
-				if exp, ok := stmt.(*ast.AssignStmt); ok {
-					for _, assign := range exp.Rhs {
-						//fmt.Printf("assign: %+v\n", assign)
-						if callExp, ok := assign.(*ast.CallExpr); ok {
-							if fn, ok := callExp.Fun.(*ast.SelectorExpr); ok {
-								//fmt.Printf(" ================>>>>>>>>>>>> Fun1: %+v\n", fn.X)
-								if a, ok := fn.X.(*ast.CallExpr); ok {
-									for _, b := range a.Args {
-										if c, ok := b.(*ast.CompositeLit); ok {
-											for _, d := range c.Elts {
-												if keyValue, ok := d.(*ast.KeyValueExpr); ok {
-													k := collName
-													actualType := ""
-													if mongoFieldNameUsedInMapQuery, ok := keyValue.Key.(*ast.BasicLit); ok {
-														k = k + "." + mongoFieldNameUsedInMapQuery.Value
-													}
-													//value is a literal value, not a variable
-													if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.BasicLit); ok {
-														actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
-													}
-													//valule is a variable
-													if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.Ident); ok {
-														actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
-													}
 
-													expectedType := collFieldTypes[k]
-													pos := f.fset.Position(keyValue.Pos())
+				ret := detectWrongTypeForField(f, stmt, collectionName)
+				if ret != nil {
+					return ret
+				}
 
-													if expectedType != actualType {
-														errorFound = &ErrTypeInfo{
-															Expected: expectedType,
-															Actual:   actualType,
-															Filename: pos.Filename,
-															Column:   pos.Column,
-															Line:     pos.Line,
-														}
-														return errorFound
-													}
-
-													//fmt.Println("key: ", k)
-													//fmt.Println("map type collFieldTypes ", collFieldTypes[k])
-												}
-											}
+			}
+		}
+	}
+	return nil
+}
+func detectWrongTypeForField(f *File, stmt ast.Stmt, collectionName string) *ErrTypeInfo {
+	if exp, ok := stmt.(*ast.AssignStmt); ok { //diego
+		for _, assign := range exp.Rhs {
+			//fmt.Printf("							1 assign: %+v\n", assign)
+			if callExp, ok := assign.(*ast.CallExpr); ok {
+				if fn, ok := callExp.Fun.(*ast.SelectorExpr); ok {
+					//fmt.Printf(" ================>>>>>>>>>>>> Fun1: %+v\n", fn.X)
+					if a, ok := fn.X.(*ast.CallExpr); ok {
+						for _, b := range a.Args {
+							if c, ok := b.(*ast.CompositeLit); ok {
+								for _, d := range c.Elts {
+									if keyValue, ok := d.(*ast.KeyValueExpr); ok {
+										k := collectionName
+										actualType := ""
+										if mongoFieldNameUsedInMapQuery, ok := keyValue.Key.(*ast.BasicLit); ok {
+											k = k + "." + mongoFieldNameUsedInMapQuery.Value
 										}
+										//value is a literal value, not a variable
+										if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.BasicLit); ok {
+											actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
+										}
+										//valule is a variable
+										if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.Ident); ok {
+											actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
+										}
+
+										expectedType := collFieldTypes[k]
+										pos := f.fset.Position(keyValue.Pos())
+										//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< actualType: %+v\n", actualType)
+										//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< expectedType: %+v\n", expectedType)
+
+										if expectedType != actualType {
+											errorFound = &ErrTypeInfo{
+												Expected: expectedType,
+												Actual:   actualType,
+												Filename: pos.Filename,
+												Column:   pos.Column,
+												Line:     pos.Line,
+											}
+											return errorFound
+										}
+
+										//fmt.Println("key: ", k)
+										//fmt.Println("map type collFieldTypes ", collFieldTypes[k])
 									}
 								}
 							}
