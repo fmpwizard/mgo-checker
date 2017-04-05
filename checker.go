@@ -12,34 +12,18 @@ import (
 )
 
 var (
-	httpResponseType types.Type
-	httpClientType   types.Type
-	errorType        *types.Interface
-	exitCode         = 0
+	errorType *types.Interface
+	exitCode  = 0
 
-	// Each of these vars has a corresponding case in (*File).Visit.
-	assignStmt    *ast.AssignStmt
-	binaryExpr    *ast.BinaryExpr
-	callExpr      *ast.CallExpr
-	compositeLit  *ast.CompositeLit
-	exprStmt      *ast.ExprStmt
-	funcDecl      *ast.FuncDecl
-	funcLit       *ast.FuncLit
-	genDecl       *ast.GenDecl
-	interfaceType *ast.InterfaceType
-	rangeStmt     *ast.RangeStmt
-	returnStmt    *ast.ReturnStmt
-	structType    *ast.StructType
+// Each of these vars has a corresponding case in (*File).Visit.
 )
 
 func init() {
 	errorType = types.Universe.Lookup("error").Type().Underlying().(*types.Interface)
-
 }
 
 func getVarAndCollectionName(f *File, node ast.Node) {
 	call := node.(*ast.CallExpr)
-	fmt.Println("====  getVarAndCollectionName  ======= ")
 	if !isFuncC(f, call) {
 		return // the function call is not related to this check.
 	}
@@ -54,20 +38,6 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 	if !ok {
 		return // the first statement is not assignment.
 	}
-	fmt.Println("//////////////////////////////////")
-	// as alternative, walk all stmts and find
-	// *ast.AssignStmt
-	// which may be a direct call to
-	// err := collection.Find(bson.M{"name": blotterID}).One(&ret)
-
-	/*
-			w, ok := stmts[1].(*ast.ExprStmt)
-			if !ok {
-				return
-			}
-
-		fmt.Printf("here %+v\n", w.X)
-	*/
 	collectionVar := rootIdent(asg.Lhs[0])
 	fmt.Printf("Boom %+v\n", collectionVar)
 	if collectionVar == nil {
@@ -92,8 +62,8 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 		if ok {
 			tpe := types.NewPointer(importType("gopkg.in/mgo.v2", "Collection"))
 			// using types.IdenticalIgnoreTags keeps returning false here
-			fmt.Printf("row1 : %+v\n", f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String())
-			if f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String() == tpe.String() {
+			fmt.Printf("row1 : %+v\n", TrimVendorPath(f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String()))
+			if TrimVendorPath(f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String()) == tpe.String() {
 				x, ok := usage.X.(*ast.CallExpr).Fun.(*ast.Ident)
 				if ok {
 					fmt.Printf("row2 : %+v\n", collName.Value)
@@ -128,8 +98,8 @@ func importType(path, name string) types.Type {
 func isFuncC(f *File, expr *ast.CallExpr) bool {
 	fun, _ := expr.Fun.(*ast.SelectorExpr)
 	sig, _ := f.pkg.types[fun].Type.(*types.Signature)
-	fmt.Println("dddddddddd ", fun)
-	fmt.Println("dddddddddd ", sig)
+	fmt.Println("dddddddddd fun: ", fun)
+	fmt.Println("dddddddddd sig: ", sig)
 
 	if sig == nil {
 		return false // the call is not on of the form x.f()
@@ -140,8 +110,8 @@ func isFuncC(f *File, expr *ast.CallExpr) bool {
 		return false // the function called does not return one value.
 	}
 
-	fmt.Println("1111 ", res.At(0).Type().String()) //*gopkg.in/mgo.v2.Collection when it is good
-	if res.At(0).Type().String() == "*gopkg.in/mgo.v2.Collection" {
+	fmt.Println("1111 ", TrimVendorPath(res.At(0).Type().String())) //*gopkg.in/mgo.v2.Collection when it is good
+	if TrimVendorPath(res.At(0).Type().String()) == "*gopkg.in/mgo.v2.Collection" {
 		fmt.Println("found C func")
 		return true
 	}
@@ -510,4 +480,15 @@ func fieldFromTag(s string) string {
 	}
 
 	return ""
+}
+
+// TrimVendorPath tries to remove the vendor path from s
+func TrimVendorPath(s string) string {
+	if strings.Contains(s, "/vendor/") {
+		if s[:1] == "*" {
+			return "*" + strings.Split(s, "/vendor/")[1]
+		}
+		return strings.Split(s, "/vendor/")[1]
+	}
+	return s
 }

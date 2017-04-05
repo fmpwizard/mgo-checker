@@ -6,15 +6,6 @@ import (
 	"gopkg.in/mgo.v2/bson"
 )
 
-// Company represents a Company document in mongodb
-// mgo:model:xyz_company
-type Company struct {
-	// Name the company name
-	Name string `bson:"name"`
-	// Zip the company zip code
-	Zip string `bson:"zip_code"`
-}
-
 func searchStep1() {
 	companyColl := connect().DB("dbname").C("xyz_company")
 	fmt.Println("some random line her")
@@ -53,4 +44,13 @@ func findTradeBlotter(session *mgo.Session, blotterID bson.ObjectId) error {
 	var ret []Company
 	err := blotterCollectionVar.Find(bson.M{"name": blotterID}).One(&ret)
 	return err
+}
+
+// Company represents a Company document in mongodb
+// mgo:model:xyz_company
+type Company struct {
+	// Name the company name
+	Name string `bson:"name"`
+	// Zip the company zip code
+	Zip string `bson:"zip_code"`
 }

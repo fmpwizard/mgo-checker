@@ -399,3 +399,17 @@ func TestExpectStrGotIntMultiItemMap2(t *testing.T) {
 		}
 	}
 }
+
+func TestTrimVendorPathPointer(t *testing.T) {
+	ret := TrimVendorPath("*github.com/ascendantcompliance/blotterizer/vendor/gopkg.in/mgo.v2.Database")
+	if ret != "*gopkg.in/mgo.v2.Database" {
+		t.Errorf("failed to trim vendor path, got: %s\n", ret)
+	}
+}
+
+func TestTrimVendorPathNoPointer(t *testing.T) {
+	ret := TrimVendorPath("github.com/ascendantcompliance/blotterizer/vendor/gopkg.in/mgo.v2.Database")
+	if ret != "gopkg.in/mgo.v2.Database" {
+		t.Errorf("failed to trim vendor path, got: %s\n", ret)
+	}
+}
