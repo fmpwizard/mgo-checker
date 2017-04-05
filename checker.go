@@ -31,6 +31,7 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 	ast.Walk(finder, f.file)
 	stmts := finder.stmts()
 	for _, v := range stmts {
+		fmt.Printf("POS : %+v\n", f.fset.Position(v.Pos()))
 		fmt.Printf("f %+v\n", reflect.TypeOf(v))
 		fmt.Printf("row is : %+v\n", v)
 	}
@@ -62,8 +63,10 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 		if ok {
 			tpe := types.NewPointer(importType("gopkg.in/mgo.v2", "Collection"))
 			// using types.IdenticalIgnoreTags keeps returning false here
-			fmt.Printf("row1 : %+v\n", TrimVendorPath(f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String()))
-			if TrimVendorPath(f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String()) == tpe.String() {
+			fmt.Printf("row1 : %+v\n", f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String())
+			fmt.Printf("row11 : %+v\n", tpe.String())
+			if f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String() == tpe.String() {
+				fmt.Printf("					=========== %+v\n", usage.X.(*ast.CallExpr).Fun)
 				x, ok := usage.X.(*ast.CallExpr).Fun.(*ast.Ident)
 				if ok {
 					fmt.Printf("row2 : %+v\n", collName.Value)
@@ -109,9 +112,9 @@ func isFuncC(f *File, expr *ast.CallExpr) bool {
 	if res.Len() != 1 {
 		return false // the function called does not return one value.
 	}
-
-	fmt.Println("1111 ", TrimVendorPath(res.At(0).Type().String())) //*gopkg.in/mgo.v2.Collection when it is good
-	if TrimVendorPath(res.At(0).Type().String()) == "*gopkg.in/mgo.v2.Collection" {
+	tpe := types.NewPointer(importType("gopkg.in/mgo.v2", "Collection"))
+	fmt.Println("1111 ", res.At(0).Type().String()) //*gopkg.in/mgo.v2.Collection when it is good
+	if res.At(0).Type().String() == tpe.String() {
 		fmt.Println("found C func")
 		return true
 	}
@@ -386,9 +389,39 @@ func detectWrongTypeForField(f *File, stmt ast.Stmt, collectionName string) *Err
 func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionName string) *ErrTypeInfo {
 	if callExp, ok := assign.(*ast.CallExpr); ok {
 		if fn, ok := callExp.Fun.(*ast.SelectorExpr); ok {
-			//fmt.Printf(" ================>>>>>>>>>>>> Fun1: %+v\n", fn.X)
+			fmt.Printf(" ================>>>>>>>>>>>> POS: %+v\n", f.fset.Position(fn.Pos()))
+			fmt.Printf(" ================>>>>>>>>>>>> Fun1: %+v\n", fn.X)
 			if a, ok := fn.X.(*ast.CallExpr); ok {
 				for _, b := range a.Args {
+					fmt.Printf(" ================>>>>>>>>>>>> POS: %+v\n", f.fset.Position(b.Pos()))
+					fmt.Printf(" ================>>>>>>>>>>>> Fun1: %+v\n", b)
+					fmt.Printf(" ================>>>>>>>>>>>> type: %+v\n", f.pkg.types[b].Type.String())
+
+					if c, ok := b.(*ast.Ident); ok {
+						//*github.com/ascendantcompliance/blotterizer/vendor/gopkg.in/mgo.v2/bson.M
+						fmt.Printf(" ================>>>>>>>>>>>> inner : %+v\n", c.Obj.Decl)
+						fmt.Printf(" ================>>>>>>>>>>>> reflect: %+v\n", reflect.TypeOf(c.Obj.Decl))
+						if d, ok := c.Obj.Decl.(*ast.AssignStmt); ok {
+							for _, r := range d.Rhs {
+								fmt.Printf(" ================>>>>>>>>>>>> inner : %+v\n", r)
+								fmt.Printf(" ================>>>>>>>>>>>> reflect: %+v\n", reflect.TypeOf(r))
+								if e, ok := r.(*ast.CallExpr); ok {
+									fmt.Printf(" ================>>>>>>>>>>>> reflect now: %+v\n", reflect.TypeOf(e.Fun))
+
+									for _, r := range e.Args {
+										fmt.Printf(" ================>>>>>>>>>>>> args : %+v\n", r)
+									}
+									if f, ok := e.Fun.(*ast.SelectorExpr); ok {
+										fmt.Printf(" ================>>>>>>>>>>>> f.Sel : %+v\n", f.Sel.Obj) //Diego this is nil becaue it is declared on a diff package
+										//find out how to scan several pacakages and merge the ast
+										if f.Sel.Obj != nil {
+											fmt.Printf(" ================>>>>>>>>>>>> reflect: %+v\n", reflect.TypeOf(f.Sel.Obj.Decl))
+										}
+									}
+								}
+							}
+						}
+					}
 					if c, ok := b.(*ast.CompositeLit); ok {
 						for _, d := range c.Elts {
 							if keyValue, ok := d.(*ast.KeyValueExpr); ok {

@@ -53,42 +53,56 @@ var info = types.Info{
 
 func main() {
 
-	dirPath := flag.String("dir-path", "", "specify the path to the folder with go files to check")
+	//dirPath := flag.String("dir-path", "", "specify the path to the folder with go files to check")
 	//debug := flag.Bool("debug", false, "print extra debug information")
 	flag.Parse()
-	filesInfo, err := ioutil.ReadDir(*dirPath)
-	var fileNames []string
-	for _, v := range filesInfo {
-		fileNames = append(fileNames, v.Name())
+	dirs := os.Args[1:]
+
+	fs := token.NewFileSet()
+	var files []*File
+	var astFiles []*ast.File
+
+	for _, dir := range dirs {
+		dir = strings.TrimSuffix(dir, "/")
+		filesInfo, err := ioutil.ReadDir(dir)
+		var filePkgPathAndNames []string
+		for _, v := range filesInfo {
+			filePkgPathAndNames = append(filePkgPathAndNames, dir+"/"+v.Name())
+		}
+		if err != nil {
+			fmt.Println("faile to read dir ", err)
+			os.Exit(1)
+		}
+
+		//files, astFiles, fset := genASTFilesAndFileWrapper(*dirPath, fileNames, fs)
+		_files, _astFiles, fset := genASTFilesAndFileWrapper(filePkgPathAndNames, fs)
+		files = append(files, _files...)
+		astFiles = append(astFiles, _astFiles...)
+		fs = fset
 	}
-	if err != nil {
-		fmt.Println("faile to read dir ", err)
-		os.Exit(1)
-	}
-	files, astFiles, fset := genASTFilesAndFileWrapper(*dirPath, fileNames)
-	ret := doPackage(files, astFiles, fset)
+	ret := doPackage(files, astFiles, fs)
 	for _, v := range ret.errors {
 		fmt.Println(v)
 	}
 }
 
-func genASTFilesAndFileWrapper(basePath string, fileNames []string) ([]*File, []*ast.File, *token.FileSet) {
+func genASTFilesAndFileWrapper(filePkgPathAndNames []string, fs *token.FileSet) ([]*File, []*ast.File, *token.FileSet) {
 	var files []*File
 	var astFiles []*ast.File
 	var funcUsingCollection = make(map[string]string, 0)
-	fs := token.NewFileSet()
-	for _, name := range fileNames {
-		data, err := ioutil.ReadFile(basePath + "/" + name)
+
+	for _, name := range filePkgPathAndNames {
+		data, err := ioutil.ReadFile(name)
 		if err != nil {
 			// Warn but continue to next package.
-			fmt.Printf("1 %s: %s", basePath+"/"+name, err)
+			fmt.Printf("1 %s: %s", name, err)
 			return nil, nil, fs
 		}
 		var parsedFile *ast.File
 		if strings.HasSuffix(name, ".go") {
 			parsedFile, err = parser.ParseFile(fs, name, data, parser.ParseComments)
 			if err != nil {
-				fmt.Printf("%s: %s", name, err)
+				fmt.Printf("2=========== %s: %s", name, err)
 				return nil, nil, fs
 			}
 			astFiles = append(astFiles, parsedFile)
@@ -122,13 +136,14 @@ func doPackage(files []*File, astFiles []*ast.File, fset *token.FileSet) *Packag
 	// Type check the package.
 	conf := &types.Config{
 		Error: func(e error) {
-			fmt.Println(e)
+			fmt.Println("failed to typecheck: ", e)
+			os.Exit(1)
 		},
 		Importer: importer.Default(),
 	}
 	_, err := conf.Check(pkg.path, fset, astFiles, &info)
 	if err != nil {
-		fmt.Printf("%s", err)
+		fmt.Printf("33 ========== %s\n", err)
 		os.Exit(1)
 	}
 
