@@ -9,6 +9,8 @@ import (
 	"os"
 	"reflect"
 	"strings"
+
+	"golang.org/x/tools/go/loader"
 )
 
 var (
@@ -28,10 +30,14 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 		return // the function call is not related to this check.
 	}
 	finder := &blockStmtFinder{node: call}
-	ast.Walk(finder, f.file)
+	ast.Walk(finder, f.currentFile)
+	fmt.Printf("stmts %+v\n", finder.block)
 	stmts := finder.stmts()
+	if stmts == nil {
+		return
+	}
 	for _, v := range stmts {
-		fmt.Printf("POS : %+v\n", f.fset.Position(v.Pos()))
+		fmt.Printf("POS : %+v\n", f.program.Fset.Position(v.Pos()))
 		fmt.Printf("f %+v\n", reflect.TypeOf(v))
 		fmt.Printf("row is : %+v\n", v)
 	}
@@ -57,15 +63,15 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 		fmt.Printf("row0 : %+v\n", row)
 		ret := detectWrongTypeForField(f, row, collName.Value)
 		if ret != nil {
-			f.pkg.errors = append(f.pkg.errors, ret)
+			f.errors = append(f.errors, ret)
 		}
 		usage, ok := row.(*ast.ExprStmt)
 		if ok {
 			tpe := types.NewPointer(importType("gopkg.in/mgo.v2", "Collection"))
 			// using types.IdenticalIgnoreTags keeps returning false here
-			fmt.Printf("row1 : %+v\n", f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String())
+			fmt.Printf("row1 : %+v\n", f.lPkg.Types[usage.X.(*ast.CallExpr).Args[0]].Type.String())
 			fmt.Printf("row11 : %+v\n", tpe.String())
-			if f.pkg.types[usage.X.(*ast.CallExpr).Args[0]].Type.String() == tpe.String() {
+			if f.lPkg.Types[usage.X.(*ast.CallExpr).Args[0]].Type.String() == tpe.String() {
 				fmt.Printf("					=========== %+v\n", usage.X.(*ast.CallExpr).Fun)
 				x, ok := usage.X.(*ast.CallExpr).Fun.(*ast.Ident)
 				if ok {
@@ -73,7 +79,7 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 					//useful info for a line like:
 					//findByZip(companyColl, "diego")
 					//x.Obj.Decl.(*ast.FuncDecl).Type.Params.List[0].Type
-					f.funcUsingCollection[f.pkg.path+"."+x.Name] = collName.Value
+					f.funcUsingCollection[f.lPkg.Pkg.Name()+"."+x.Name] = collName.Value
 				}
 			}
 		}
@@ -100,7 +106,7 @@ func importType(path, name string) types.Type {
 // returns (*http.Response, error).
 func isFuncC(f *File, expr *ast.CallExpr) bool {
 	fun, _ := expr.Fun.(*ast.SelectorExpr)
-	sig, _ := f.pkg.types[fun].Type.(*types.Signature)
+	sig, _ := f.lPkg.Types[fun].Type.(*types.Signature)
 	fmt.Println("dddddddddd fun: ", fun)
 	fmt.Println("dddddddddd sig: ", sig)
 
@@ -132,9 +138,12 @@ type blockStmtFinder struct {
 // Visit finds f.node performing a search down the ast tree.
 // It keeps the last block statement and statement seen for later use.
 func (f *blockStmtFinder) Visit(node ast.Node) ast.Visitor {
+	fmt.Printf("========== diego: f.node: %+v\n", f.node)
+	fmt.Printf("========== diego: node: %+v\n", node)
 	if node == nil || f.node.Pos() < node.Pos() || f.node.End() > node.End() {
 		return nil // not here
 	}
+
 	switch n := node.(type) {
 	case *ast.BlockStmt:
 		f.block = n
@@ -142,6 +151,7 @@ func (f *blockStmtFinder) Visit(node ast.Node) ast.Visitor {
 		f.stmt = n
 	}
 	if f.node.Pos() == node.Pos() && f.node.End() == node.End() {
+		fmt.Printf("1 Bad!!!!!!!!!!!!!!!! %+v\n", f.node)
 		return nil // found
 	}
 	return f // keep looking
@@ -149,6 +159,9 @@ func (f *blockStmtFinder) Visit(node ast.Node) ast.Visitor {
 
 // stmts returns the statements of f.block starting from the one including f.node.
 func (f *blockStmtFinder) stmts() []ast.Stmt {
+	if f.block == nil {
+		return nil
+	}
 	for i, v := range f.block.List {
 		if f.stmt == v {
 			return f.block.List[i:]
@@ -172,11 +185,17 @@ func rootIdent(n ast.Node) *ast.Ident {
 // File is a wrapper for the state of a file used in the parser.
 // The parse tree walkers are all methods of this type.
 type File struct {
-	pkg     *Package
-	fset    *token.FileSet
-	name    string
-	content []byte
-	file    *ast.File
+	program *loader.Program
+	lPkg    *loader.PackageInfo
+	errors  []*ErrTypeInfo
+	// "collection.field = string | int | bson.ObjectId"
+	collFieldTypes map[string]string
+	//diego
+	//pkg     *Package
+	//fset    *token.FileSet
+	//name    string
+	//content []byte
+	currentFile *ast.File
 
 	//funcUsingCollection map[ast.Expr]string //map of line like findByZip(companyColl, "diego") => xyz_company  which is the colletion name
 	funcUsingCollection map[string]string //map of line like seeddata.findByZip: xyz_company  which is the package.funcName: colletion name
@@ -263,7 +282,7 @@ func (f *File) loc(pos token.Pos) string {
 	// Do not print columns. Because the pos often points to the start of an
 	// expression instead of the inner part with the actual error, the
 	// precision can mislead.
-	posn := f.fset.Position(pos)
+	posn := f.program.Fset.Position(pos)
 	return fmt.Sprintf("%s:%d", posn.Filename, posn.Line)
 }
 
@@ -286,9 +305,12 @@ func (f *File) Warnf(pos token.Pos, format string, args ...interface{}) {
 }
 
 // walkFile walks the file's tree.
-func (f *File) walkFile(name string, file *ast.File) {
+func (f *File) walkFile(name string) {
 	fmt.Println("Checking file", name)
-	ast.Walk(f, file)
+	for _, file := range f.lPkg.Files {
+		f.currentFile = file
+		ast.Walk(f, file)
+	}
 }
 
 // Visit implements the ast.Visitor interface.
@@ -313,7 +335,7 @@ func (f *File) Visit(node ast.Node) ast.Visitor {
 	case *ast.FuncDecl:
 		err := findFnUsingCollection(f, node)
 		if err != nil {
-			f.pkg.errors = append(f.pkg.errors, err)
+			f.errors = append(f.errors, err)
 			return nil
 		}
 		/*
@@ -344,7 +366,7 @@ func (f *File) Visit(node ast.Node) ast.Visitor {
 
 func findFnUsingCollection(f *File, node ast.Node) *ErrTypeInfo {
 	if n, ok := node.(*ast.FuncDecl); ok {
-		if collectionName, ok := f.funcUsingCollection[f.pkg.path+"."+n.Name.Name]; ok {
+		if collectionName, ok := f.funcUsingCollection[f.lPkg.Pkg.Name()+"."+n.Name.Name]; ok {
 			//fmt.Printf("										Found matching fn: %s using collection: %+v\n", n.Name.Name, collectionName)
 			for _, stmt := range n.Body.List {
 				//fmt.Printf("stmt: %+v\n", stmt)
@@ -389,13 +411,13 @@ func detectWrongTypeForField(f *File, stmt ast.Stmt, collectionName string) *Err
 func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionName string) *ErrTypeInfo {
 	if callExp, ok := assign.(*ast.CallExpr); ok {
 		if fn, ok := callExp.Fun.(*ast.SelectorExpr); ok {
-			fmt.Printf(" ================>>>>>>>>>>>> POS: %+v\n", f.fset.Position(fn.Pos()))
+			fmt.Printf(" ================>>>>>>>>>>>> POS: %+v\n", f.program.Fset.Position(fn.Pos()))
 			fmt.Printf(" ================>>>>>>>>>>>> Fun1: %+v\n", fn.X)
 			if a, ok := fn.X.(*ast.CallExpr); ok {
 				for _, b := range a.Args {
-					fmt.Printf(" ================>>>>>>>>>>>> POS: %+v\n", f.fset.Position(b.Pos()))
+					fmt.Printf(" ================>>>>>>>>>>>> POS: %+v\n", f.program.Fset.Position(b.Pos()))
 					fmt.Printf(" ================>>>>>>>>>>>> Fun1: %+v\n", b)
-					fmt.Printf(" ================>>>>>>>>>>>> type: %+v\n", f.pkg.types[b].Type.String())
+					fmt.Printf(" ================>>>>>>>>>>>> type: %+v\n", f.lPkg.Types[b].Type.String())
 
 					if c, ok := b.(*ast.Ident); ok {
 						//*github.com/ascendantcompliance/blotterizer/vendor/gopkg.in/mgo.v2/bson.M
@@ -432,15 +454,15 @@ func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionN
 								}
 								//value is a literal value, not a variable
 								if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.BasicLit); ok {
-									actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
+									actualType = f.lPkg.Types[mongoFieldTypeUsedInMapQuery].Type.String()
 								}
 								//valule is a variable
 								if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.Ident); ok {
-									actualType = f.pkg.types[mongoFieldTypeUsedInMapQuery].Type.String()
+									actualType = f.lPkg.Types[mongoFieldTypeUsedInMapQuery].Type.String()
 								}
 
-								expectedType := f.pkg.collFieldTypes[k]
-								pos := f.fset.Position(keyValue.Value.Pos())
+								expectedType := f.collFieldTypes[k]
+								pos := f.program.Fset.Position(keyValue.Value.Pos())
 								//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< actualType: %+v\n", actualType)
 								//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< expectedType: %+v\n", expectedType)
 
@@ -477,10 +499,10 @@ func getFieldNameToTypeMap(f *File, node ast.Node) {
 					if cleanFieldName == "" {
 						for _, name := range field.Names {
 							cleanFieldName = strings.ToLower(name.Name)
-							f.pkg.collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = info.TypeOf(field.Type).String()
+							f.collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = info.TypeOf(field.Type).String()
 						}
 					} else {
-						f.pkg.collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = info.TypeOf(field.Type).String()
+						f.collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = info.TypeOf(field.Type).String()
 					}
 				}
 			}

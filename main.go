@@ -4,14 +4,18 @@ import (
 	"flag"
 	"fmt"
 	"go/ast"
-	"go/importer"
-	"go/parser"
-	"go/token"
+	//"go/importer"
+	//"go/parser"
+	//"go/token"
 	"go/types"
-	"io/ioutil"
+	//"io/ioutil"
 	"os"
-	"strings"
+	//"strings"
+
+	"golang.org/x/tools/go/loader"
 )
+
+var conf loader.Config
 
 // ErrTypeInfo holds information about the incorrect type parameter found.
 type ErrTypeInfo struct {
@@ -58,34 +62,90 @@ func main() {
 	flag.Parse()
 	dirs := os.Args[1:]
 
-	fs := token.NewFileSet()
-	var files []*File
-	var astFiles []*ast.File
+	conf.FromArgs(dirs, false)
 
-	for _, dir := range dirs {
-		dir = strings.TrimSuffix(dir, "/")
-		filesInfo, err := ioutil.ReadDir(dir)
-		var filePkgPathAndNames []string
-		for _, v := range filesInfo {
-			filePkgPathAndNames = append(filePkgPathAndNames, dir+"/"+v.Name())
-		}
-		if err != nil {
-			fmt.Println("faile to read dir ", err)
-			os.Exit(1)
-		}
-
-		//files, astFiles, fset := genASTFilesAndFileWrapper(*dirPath, fileNames, fs)
-		_files, _astFiles, fset := genASTFilesAndFileWrapper(filePkgPathAndNames, fs)
-		files = append(files, _files...)
-		astFiles = append(astFiles, _astFiles...)
-		fs = fset
+	program, err := conf.Load()
+	if err != nil {
+		fmt.Println("failed ", err)
+		os.Exit(1)
 	}
-	ret := doPackage(files, astFiles, fs)
-	for _, v := range ret.errors {
-		fmt.Println(v)
+
+	collFieldTypes := make(map[string]string)
+
+	for _, createdPackage := range program.Imported {
+		v := &File{
+			program:        program,
+			lPkg:           createdPackage,
+			collFieldTypes: collFieldTypes,
+		}
+		v.walkFile("testing")
+		//walkPackage(program, createdPackage)
+	}
+
+	for _, createdPackage := range program.Created {
+		v := &File{
+			program: program,
+			lPkg:    createdPackage,
+		}
+		v.walkFile("testing")
+	}
+
+	/*
+
+		fs := token.NewFileSet()
+		var files []*File
+		var astFiles []*ast.File
+
+		for _, dir := range dirs {
+			dir = strings.TrimSuffix(dir, "/")
+			filesInfo, err := ioutil.ReadDir(dir)
+			var filePkgPathAndNames []string
+			for _, v := range filesInfo {
+				filePkgPathAndNames = append(filePkgPathAndNames, dir+"/"+v.Name())
+			}
+			if err != nil {
+				fmt.Println("faile to read dir ", err)
+				os.Exit(1)
+			}
+
+			//files, astFiles, fset := genASTFilesAndFileWrapper(*dirPath, fileNames, fs)
+			_files, _astFiles, fset := genASTFilesAndFileWrapper(filePkgPathAndNames, fs)
+			files = append(files, _files...)
+			astFiles = append(astFiles, _astFiles...)
+			fs = fset
+		}
+		ret := doPackage(files, astFiles, fs)
+		for _, v := range ret.errors {
+			fmt.Println(v)
+		}
+	*/
+}
+
+func walkPackage(program *loader.Program, info *loader.PackageInfo) {
+	for _, file := range info.Files {
+		v := &visitor{
+			program,
+			info,
+		}
+		ast.Walk(v, file)
 	}
 }
 
+type visitor struct {
+	program *loader.Program
+	pkg     *loader.PackageInfo
+}
+
+func (v *visitor) Visit(node ast.Node) ast.Visitor {
+	if stmt, isRange := node.(*ast.RangeStmt); isRange {
+		if _, isMap := v.pkg.TypeOf(stmt.X).(*types.Map); isMap {
+			fmt.Println(v.program.Fset.Position(node.Pos()))
+		}
+	}
+	return v
+}
+
+/*
 func genASTFilesAndFileWrapper(filePkgPathAndNames []string, fs *token.FileSet) ([]*File, []*ast.File, *token.FileSet) {
 	var files []*File
 	var astFiles []*ast.File
@@ -160,3 +220,4 @@ func doPackage(files []*File, astFiles []*ast.File, fset *token.FileSet) *Packag
 
 	return pkg
 }
+*/
