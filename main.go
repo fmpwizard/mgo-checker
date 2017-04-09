@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"go/ast"
 	//"go/importer"
-	//"go/parser"
+	"go/parser"
 	//"go/token"
 	"go/types"
 	//"io/ioutil"
@@ -46,6 +46,7 @@ func (e ErrTypeInfo) String() string {
 	)
 }
 
+/*
 var info = types.Info{
 	Types:      make(map[ast.Expr]types.TypeAndValue),
 	Defs:       make(map[*ast.Ident]types.Object),
@@ -54,7 +55,7 @@ var info = types.Info{
 	Selections: make(map[*ast.SelectorExpr]*types.Selection),
 	Scopes:     make(map[ast.Node]*types.Scope),
 }
-
+*/
 func main() {
 
 	//dirPath := flag.String("dir-path", "", "specify the path to the folder with go files to check")
@@ -63,6 +64,7 @@ func main() {
 	dirs := os.Args[1:]
 
 	conf.FromArgs(dirs, false)
+	conf.ParserMode = parser.ParseComments
 
 	program, err := conf.Load()
 	if err != nil {
@@ -71,23 +73,41 @@ func main() {
 	}
 
 	collFieldTypes := make(map[string]string)
+	funcUsingCollection := make(map[string]string)
 
 	for _, createdPackage := range program.Imported {
 		v := &File{
-			program:        program,
-			lPkg:           createdPackage,
-			collFieldTypes: collFieldTypes,
+			program:             program,
+			lPkg:                createdPackage,
+			collFieldTypes:      collFieldTypes,
+			funcUsingCollection: funcUsingCollection,
 		}
 		v.walkFile("testing")
+		for _, v := range v.errors {
+			fmt.Println("Boom2 =>>>>>>>>>>>>> ", v)
+		}
 		//walkPackage(program, createdPackage)
 	}
 
 	for _, createdPackage := range program.Created {
 		v := &File{
-			program: program,
-			lPkg:    createdPackage,
+			program:             program,
+			lPkg:                createdPackage,
+			collFieldTypes:      collFieldTypes,
+			funcUsingCollection: funcUsingCollection,
 		}
 		v.walkFile("testing")
+		for _, v := range v.errors {
+			fmt.Println("Boom2 =>>>>>>>>>>>>> ", v)
+		}
+	}
+
+	for k, v := range collFieldTypes {
+		fmt.Printf("collFieldTypes key: %s, v: %s\n", k, v)
+	}
+
+	for k, v := range funcUsingCollection {
+		fmt.Printf("funcUsingCollection key: %s, v: %s\n", k, v)
 	}
 
 	/*

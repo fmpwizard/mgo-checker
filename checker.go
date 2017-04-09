@@ -80,6 +80,7 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 					//findByZip(companyColl, "diego")
 					//x.Obj.Decl.(*ast.FuncDecl).Type.Params.List[0].Type
 					f.funcUsingCollection[f.lPkg.Pkg.Name()+"."+x.Name] = collName.Value
+					fmt.Printf("Boom			%+v\n", f.funcUsingCollection)
 				}
 			}
 		}
@@ -488,9 +489,11 @@ func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionN
 
 func getFieldNameToTypeMap(f *File, node ast.Node) {
 	if n, ok := node.(*ast.GenDecl); ok {
-
 		if ok, t := getMgoCollectionFromComment(n.Doc.Text()); ok {
+			fmt.Println("Boom1:")
+
 			for _, row := range n.Specs {
+
 				for _, field := range row.(*ast.TypeSpec).Type.(*ast.StructType).Fields.List {
 					cleanFieldName := ""
 					if field.Tag != nil {
@@ -499,11 +502,12 @@ func getFieldNameToTypeMap(f *File, node ast.Node) {
 					if cleanFieldName == "" {
 						for _, name := range field.Names {
 							cleanFieldName = strings.ToLower(name.Name)
-							f.collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = info.TypeOf(field.Type).String()
+							f.collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = f.lPkg.TypeOf(field.Type).String()
 						}
 					} else {
-						f.collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = info.TypeOf(field.Type).String()
+						f.collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = f.lPkg.TypeOf(field.Type).String()
 					}
+					fmt.Printf("Boom1: %+v\n", f.collFieldTypes)
 				}
 			}
 		}
@@ -511,6 +515,8 @@ func getFieldNameToTypeMap(f *File, node ast.Node) {
 }
 
 func getMgoCollectionFromComment(s string) (bool, string) {
+	fmt.Println("Boom1: ", s)
+
 	if strings.Contains(s, "mgo:model:") {
 		start := strings.Index(s, "mgo:model:")
 		return true, strings.TrimSpace(strings.TrimPrefix(s[start:], "mgo:model:"))
