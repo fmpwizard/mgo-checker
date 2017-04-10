@@ -69,6 +69,9 @@ func getVarAndCollectionName(f *File, node ast.Node) {
 		if ok {
 			tpe := types.NewPointer(importType("gopkg.in/mgo.v2", "Collection"))
 			// using types.IdenticalIgnoreTags keeps returning false here
+			if len(usage.X.(*ast.CallExpr).Args) == 0 {
+				return
+			}
 			fmt.Printf("row1 : %+v\n", f.lPkg.Types[usage.X.(*ast.CallExpr).Args[0]].Type.String())
 			fmt.Printf("row11 : %+v\n", tpe.String())
 			if f.lPkg.Types[usage.X.(*ast.CallExpr).Args[0]].Type.String() == tpe.String() {
@@ -191,26 +194,10 @@ type File struct {
 	errors  []*ErrTypeInfo
 	// "collection.field = string | int | bson.ObjectId"
 	collFieldTypes map[string]string
-	//diego
-	//pkg     *Package
-	//fset    *token.FileSet
-	//name    string
-	//content []byte
-	currentFile *ast.File
+	currentFile    *ast.File
 
 	//funcUsingCollection map[ast.Expr]string //map of line like findByZip(companyColl, "diego") => xyz_company  which is the colletion name
 	funcUsingCollection map[string]string //map of line like seeddata.findByZip: xyz_company  which is the package.funcName: colletion name
-	//b       bytes.Buffer // for use by methods
-
-	// Parsed package "foo" when checking package "foo_test"
-	//basePkg *Package
-
-	// The objects that are receivers of a "String() string" method.
-	// This is used by the recursiveStringer method in print.go.
-	//stringers map[*ast.Object]bool
-
-	// Registered checkers to run.
-	//checkers map[ast.Node][]func(*File, ast.Node)
 }
 
 // Package holds information for the current Go package we are processing
@@ -434,52 +421,103 @@ func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionN
 									for _, r := range e.Args {
 										fmt.Printf(" ================>>>>>>>>>>>> args : %+v\n", r)
 									}
-									if f, ok := e.Fun.(*ast.SelectorExpr); ok {
-										fmt.Printf(" ================>>>>>>>>>>>> f.Sel : %+v\n", f.Sel.Obj) //Diego this is nil becaue it is declared on a diff package
+									if ff, ok := e.Fun.(*ast.SelectorExpr); ok {
+										/*
+											for k, v := range f.lPkg.Defs {
+												fmt.Printf("key: %+v, value: %+v\n", k, v)
+											}
+										*/
+										//fmt.Printf(" ================>>>>>>>>>>>> ff.Sel.Obj : %+v\n", ff.Sel.Obj) //Diego this is nil becaue it is declared on a diff package
+										//fmt.Printf(" ================>>>>>>>>>>>> ff.Sel : %+v\n", ff.Sel)
+										fmt.Printf(" ================>>>>>>>>>>>> ff : %+v\n", ff)
+										fmt.Printf(" ================>>>>>>>>>>>> f.lPkg.Selections[ff].Obj().Pos() : %+v\n", f.lPkg.Selections[ff].Obj().Pos())
+										pos := f.lPkg.Selections[ff].Obj().Pos()
+										//name := f.lPkg.Selections[ff].Obj().Name()
+										//position := f.program.Fset.Position(pos)
+										fmt.Printf(" <<<<<<<<<<<<<<<<<<<<<<<>>>>>>>>>>>>  : %+v\n", f.program.Fset.File(pos))
+										for k, r := range f.program.AllPackages {
+											if r != nil {
+												fmt.Printf(" diego1 : %+v\n", k.Name())
+												for _, astFile := range r.Files {
+													for _, v := range astFile.Decls {
+														if a, ok := v.(*ast.FuncDecl); ok {
+															if a.Body != nil {
+																fmt.Printf(" diego21 :%+v,  %+v, %+v, %+v\n", v, a.Pos(), a.Body.List, f.lPkg.Selections[ff].Obj().Pos()) //diego
+																for _, b := range a.Body.List {
+																	if c, ok := b.(*ast.AssignStmt); ok {
+																		for _, d := range c.Rhs {
+																			fmt.Printf(" diegom :%+v,  %+v\n", v, d)                 //diego
+																			fmt.Printf(" diegom :%+v,  %+v\n", v, reflect.TypeOf(d)) //diego
+																			if err := checkTypeComLit(f, d, collectionName); err != nil {
+																				fmt.Println("diegom ", err)
+																				return err
+																			}
+																		}
+																	}
+																}
+																//fmt.Printf(" diego2 : %+v, %+v, %+v\n", k, reflect.TypeOf(v), a.Body.List) //diego
+															}
+														}
+													}
+												}
+											}
+										}
+										fmt.Printf(" ================>>>>>>>>>>>> f.lPkg.Type[ff.Sel] : %+v\n", f.lPkg.Types[ff])
 										//find out how to scan several pacakages and merge the ast
-										if f.Sel.Obj != nil {
-											fmt.Printf(" ================>>>>>>>>>>>> reflect: %+v\n", reflect.TypeOf(f.Sel.Obj.Decl))
+										if ff.Sel.Obj != nil {
+											fmt.Printf(" ================>>>>>>>>>>>> reflect: %+v\n", reflect.TypeOf(ff.Sel.Obj.Decl))
 										}
 									}
 								}
 							}
 						}
 					}
-					if c, ok := b.(*ast.CompositeLit); ok {
-						for _, d := range c.Elts {
-							if keyValue, ok := d.(*ast.KeyValueExpr); ok {
-								k := collectionName
-								actualType := ""
-								if mongoFieldNameUsedInMapQuery, ok := keyValue.Key.(*ast.BasicLit); ok {
-									k = k + "." + mongoFieldNameUsedInMapQuery.Value
-								}
-								//value is a literal value, not a variable
-								if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.BasicLit); ok {
-									actualType = f.lPkg.Types[mongoFieldTypeUsedInMapQuery].Type.String()
-								}
-								//valule is a variable
-								if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.Ident); ok {
-									actualType = f.lPkg.Types[mongoFieldTypeUsedInMapQuery].Type.String()
-								}
 
-								expectedType := f.collFieldTypes[k]
-								pos := f.program.Fset.Position(keyValue.Value.Pos())
-								//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< actualType: %+v\n", actualType)
-								//fmt.Printf(" ================>>>>>>>>>>>> <<<<<<<<<<<<<<<<< expectedType: %+v\n", expectedType)
-
-								if expectedType != actualType {
-									errorFound := &ErrTypeInfo{
-										Expected: expectedType,
-										Actual:   actualType,
-										Filename: pos.Filename,
-										Column:   pos.Column,
-										Line:     pos.Line,
-									}
-									return errorFound
-								}
-							}
-						}
+					if err := checkTypeComLit(f, b, collectionName); err != nil {
+						return err
 					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func checkTypeComLit(f *File, b ast.Expr, collectionName string) *ErrTypeInfo {
+	if c, ok := b.(*ast.CompositeLit); ok {
+		for _, d := range c.Elts {
+			if keyValue, ok := d.(*ast.KeyValueExpr); ok {
+				k := collectionName
+				actualType := ""
+				if mongoFieldNameUsedInMapQuery, ok := keyValue.Key.(*ast.BasicLit); ok {
+					k = k + "." + mongoFieldNameUsedInMapQuery.Value
+				}
+				//value is a literal value, not a variable
+				if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.BasicLit); ok {
+					fmt.Printf("diegom1 %+v\n", collectionName)
+					if v, ok := f.lPkg.Types[mongoFieldTypeUsedInMapQuery]; ok {
+						fmt.Printf("diegom %+v\n", mongoFieldTypeUsedInMapQuery)
+						actualType = v.Type.String()
+					}
+				}
+				//valule is a variable
+				if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.Ident); ok {
+					if v, ok := f.lPkg.Types[mongoFieldTypeUsedInMapQuery]; ok {
+						actualType = v.Type.String()
+					}
+				}
+
+				expectedType := f.collFieldTypes[k]
+				pos := f.program.Fset.Position(keyValue.Value.Pos())
+				if expectedType != actualType {
+					errorFound := &ErrTypeInfo{
+						Expected: expectedType,
+						Actual:   actualType,
+						Filename: pos.Filename,
+						Column:   pos.Column,
+						Line:     pos.Line,
+					}
+					return errorFound
 				}
 			}
 		}
@@ -490,10 +528,7 @@ func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionN
 func getFieldNameToTypeMap(f *File, node ast.Node) {
 	if n, ok := node.(*ast.GenDecl); ok {
 		if ok, t := getMgoCollectionFromComment(n.Doc.Text()); ok {
-			fmt.Println("Boom1:")
-
 			for _, row := range n.Specs {
-
 				for _, field := range row.(*ast.TypeSpec).Type.(*ast.StructType).Fields.List {
 					cleanFieldName := ""
 					if field.Tag != nil {
@@ -507,7 +542,6 @@ func getFieldNameToTypeMap(f *File, node ast.Node) {
 					} else {
 						f.collFieldTypes[fmt.Sprintf("%q", t)+"."+fmt.Sprintf("%q", cleanFieldName)] = f.lPkg.TypeOf(field.Type).String()
 					}
-					fmt.Printf("Boom1: %+v\n", f.collFieldTypes)
 				}
 			}
 		}
@@ -515,8 +549,6 @@ func getFieldNameToTypeMap(f *File, node ast.Node) {
 }
 
 func getMgoCollectionFromComment(s string) (bool, string) {
-	fmt.Println("Boom1: ", s)
-
 	if strings.Contains(s, "mgo:model:") {
 		start := strings.Index(s, "mgo:model:")
 		return true, strings.TrimSpace(strings.TrimPrefix(s[start:], "mgo:model:"))

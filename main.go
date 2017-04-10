@@ -74,6 +74,7 @@ func main() {
 
 	collFieldTypes := make(map[string]string)
 	funcUsingCollection := make(map[string]string)
+	allMgoErrors := make([]*ErrTypeInfo, 0, 0)
 
 	for _, createdPackage := range program.Imported {
 		v := &File{
@@ -83,9 +84,7 @@ func main() {
 			funcUsingCollection: funcUsingCollection,
 		}
 		v.walkFile("testing")
-		for _, v := range v.errors {
-			fmt.Println("Boom2 =>>>>>>>>>>>>> ", v)
-		}
+		allMgoErrors = append(allMgoErrors, v.errors...)
 		//walkPackage(program, createdPackage)
 	}
 
@@ -97,9 +96,8 @@ func main() {
 			funcUsingCollection: funcUsingCollection,
 		}
 		v.walkFile("testing")
-		for _, v := range v.errors {
-			fmt.Println("Boom2 =>>>>>>>>>>>>> ", v)
-		}
+		allMgoErrors = append(allMgoErrors, v.errors...)
+
 	}
 
 	for k, v := range collFieldTypes {
@@ -108,6 +106,10 @@ func main() {
 
 	for k, v := range funcUsingCollection {
 		fmt.Printf("funcUsingCollection key: %s, v: %s\n", k, v)
+	}
+
+	for _, v := range allMgoErrors {
+		fmt.Println("Boom21 =>>>>>>>>>>>>> ", v)
 	}
 
 	/*
