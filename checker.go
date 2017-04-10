@@ -491,17 +491,22 @@ func checkTypeComLit(f *File, b ast.Expr, collectionName string) *ErrTypeInfo {
 				actualType := ""
 				if mongoFieldNameUsedInMapQuery, ok := keyValue.Key.(*ast.BasicLit); ok {
 					k = k + "." + mongoFieldNameUsedInMapQuery.Value
+					//if f.collFieldTypes[k] == "time.Time" {
+					fmt.Printf("diegomm0 %+v\n", collectionName)
+					fmt.Printf("diegomm1 %+v\n", keyValue.Value)
+					fmt.Printf("diegomm2 %+v\n", reflect.TypeOf(keyValue.Value))
+					//}
 				}
-				//value is a literal value, not a variable
-				if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.BasicLit); ok {
-					fmt.Printf("diegom1 %+v\n", collectionName)
+
+				switch mongoFieldTypeUsedInMapQuery := keyValue.Value.(type) {
+				case *ast.BasicLit:
+					//value is a literal value, not a variable
 					if v, ok := f.lPkg.Types[mongoFieldTypeUsedInMapQuery]; ok {
 						fmt.Printf("diegom %+v\n", mongoFieldTypeUsedInMapQuery)
 						actualType = v.Type.String()
 					}
-				}
-				//valule is a variable
-				if mongoFieldTypeUsedInMapQuery, ok := keyValue.Value.(*ast.Ident); ok {
+				case *ast.Ident:
+					//valule is a variable
 					if v, ok := f.lPkg.Types[mongoFieldTypeUsedInMapQuery]; ok {
 						actualType = v.Type.String()
 					}
