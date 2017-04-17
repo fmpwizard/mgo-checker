@@ -483,6 +483,7 @@ func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionN
 	return nil
 }
 
+//diego todo: insteead of all these nested if and cast, use a one level switch and keep pasisng the current node to itself until you reach the end
 func checkTypeComLit(f *File, b ast.Expr, collectionName string) *ErrTypeInfo {
 	if c, ok := b.(*ast.CompositeLit); ok {
 		fmt.Println("diegommLine:   ", f.program.Fset.Position(b.Pos()))
@@ -500,22 +501,35 @@ func checkTypeComLit(f *File, b ast.Expr, collectionName string) *ErrTypeInfo {
 				}
 
 				switch mongoFieldTypeUsedInMapQuery := keyValue.Value.(type) {
+
 				case *ast.BasicLit:
 					//value is a literal value, not a variable
 					if v, ok := f.lPkg.Types[mongoFieldTypeUsedInMapQuery]; ok {
 						fmt.Printf("diegom %+v\n", mongoFieldTypeUsedInMapQuery)
 						actualType = v.Type.String()
 					}
-				case *ast.Ident:
-					//valule is a variable
-					if v, ok := f.lPkg.Types[mongoFieldTypeUsedInMapQuery]; ok {
-						actualType = v.Type.String()
-					}
+
 				case *ast.CompositeLit:
 					fmt.Printf("diegom3 %+v\n", mongoFieldTypeUsedInMapQuery.Type)
 					if err := checkTypeComLit(f, mongoFieldTypeUsedInMapQuery, collectionName); err != nil {
 						return err
 					}
+
+				case *ast.Ident:
+					fmt.Println("diegomm 1")
+					//valule is a variable
+					if v, ok := f.lPkg.Types[mongoFieldTypeUsedInMapQuery]; ok {
+						actualType = v.Type.String()
+						fmt.Println("diegomm 2 ", v.Type.String())
+						fmt.Printf("diegomm 2 %+v\n", mongoFieldTypeUsedInMapQuery.Obj.Decl)
+						fmt.Printf("diegomm 2 %+v\n", reflect.TypeOf(mongoFieldTypeUsedInMapQuery.Obj.Decl))
+						if a, ok := mongoFieldTypeUsedInMapQuery.Obj.Decl.(*ast.CompositeLit); ok {
+							fmt.Println("diegomm 22 ", a)
+
+						}
+
+					}
+
 				default:
 					fmt.Printf("diegom4 %+v\n", reflect.TypeOf(mongoFieldTypeUsedInMapQuery))
 				}
