@@ -485,6 +485,7 @@ func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionN
 
 func checkTypeComLit(f *File, b ast.Expr, collectionName string) *ErrTypeInfo {
 	if c, ok := b.(*ast.CompositeLit); ok {
+		fmt.Println("diegommLine:   ", f.program.Fset.Position(b.Pos()))
 		for _, d := range c.Elts {
 			if keyValue, ok := d.(*ast.KeyValueExpr); ok {
 				k := collectionName
@@ -492,9 +493,9 @@ func checkTypeComLit(f *File, b ast.Expr, collectionName string) *ErrTypeInfo {
 				if mongoFieldNameUsedInMapQuery, ok := keyValue.Key.(*ast.BasicLit); ok {
 					k = k + "." + mongoFieldNameUsedInMapQuery.Value
 					//if f.collFieldTypes[k] == "time.Time" {
-					fmt.Printf("diegomm0 %+v\n", collectionName)
-					fmt.Printf("diegomm1 %+v\n", keyValue.Value)
-					fmt.Printf("diegomm2 %+v\n", reflect.TypeOf(keyValue.Value))
+					//fmt.Printf("diegomm0 %+v\n", collectionName)
+					//fmt.Printf("diegomm1 %+v\n", keyValue.Value)
+					//fmt.Printf("diegomm2 %+v\n", reflect.TypeOf(keyValue.Value))
 					//}
 				}
 
@@ -510,6 +511,13 @@ func checkTypeComLit(f *File, b ast.Expr, collectionName string) *ErrTypeInfo {
 					if v, ok := f.lPkg.Types[mongoFieldTypeUsedInMapQuery]; ok {
 						actualType = v.Type.String()
 					}
+				case *ast.CompositeLit:
+					fmt.Printf("diegom3 %+v\n", mongoFieldTypeUsedInMapQuery.Type)
+					if err := checkTypeComLit(f, mongoFieldTypeUsedInMapQuery, collectionName); err != nil {
+						return err
+					}
+				default:
+					fmt.Printf("diegom4 %+v\n", reflect.TypeOf(mongoFieldTypeUsedInMapQuery))
 				}
 
 				expectedType := f.collFieldTypes[k]

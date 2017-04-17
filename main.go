@@ -29,7 +29,7 @@ type ErrTypeInfo struct {
 func (e ErrTypeInfo) String() string {
 	if e.Expected == "" {
 		return fmt.Sprintf(
-			"%s:%d:%d: wrong mongodb field name, could not find field: %q",
+			"%s:%d:%d: wrong mongodb field name, do not know if we expected type: %q",
 			e.Filename,
 			e.Line,
 			e.Column,
