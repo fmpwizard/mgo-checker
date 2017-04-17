@@ -1,10 +1,11 @@
 package seeddata
 
 import (
-	//"fmt"
+	"fmt"
+	"time"
+
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
-	"time"
 )
 
 // Company represents a Company document in mongodb
@@ -17,7 +18,6 @@ type Company struct {
 	Created time.Time
 }
 
-/*
 func searchStep1() {
 	companyColl := connect().DB("dbname").C("xyz_company")
 	fmt.Println("some random line her")
@@ -57,7 +57,7 @@ func findTradeBlotter(session *mgo.Session, blotterID bson.ObjectId) error {
 	err := blotterCollectionVar.Find(bson.M{"name": blotterID}).One(&ret)
 	return err
 }
-*/
+
 func findTradeBlotterTime(session *mgo.Session) error {
 	_session := session.Copy()
 	defer _session.Close()

@@ -373,19 +373,25 @@ func findFnUsingCollection(f *File, node ast.Node) *ErrTypeInfo {
 	return nil
 }
 func detectWrongTypeForField(f *File, stmt ast.Stmt, collectionName string) *ErrTypeInfo {
-	if exp, ok := stmt.(*ast.AssignStmt); ok {
-		for _, assign := range exp.Rhs {
+
+	switch n := stmt.(type) {
+
+	case *ast.AssignStmt:
+		//if exp, ok := stmt.(*ast.AssignStmt); ok {
+		for _, assign := range n.Rhs {
 			ret := detectWrongTypeForFieldInsideCallExpr(f, assign, collectionName)
 			if ret != nil {
 				return ret
 			}
 		}
-	} else if n, ok := stmt.(*ast.ExprStmt); ok {
+
+	case *ast.ExprStmt:
 		ret := detectWrongTypeForFieldInsideCallExpr(f, n.X, collectionName)
 		if ret != nil {
 			return ret
 		}
-	} else if n, ok := stmt.(*ast.ReturnStmt); ok {
+
+	case *ast.ReturnStmt:
 		for _, r := range n.Results {
 			ret := detectWrongTypeForFieldInsideCallExpr(f, r, collectionName)
 			if ret != nil {
@@ -483,11 +489,38 @@ func detectWrongTypeForFieldInsideCallExpr(f *File, assign ast.Expr, collectionN
 	return nil
 }
 
-//diego todo: insteead of all these nested if and cast, use a one level switch and keep pasisng the current node to itself until you reach the end
-func checkTypeComLit(f *File, b ast.Expr, collectionName string) *ErrTypeInfo {
-	if c, ok := b.(*ast.CompositeLit); ok {
+//diego todo: instead of all these nested if and cast, use a one level switch and keep pasisng the current node to itself until you reach the end
+func checkTypeComLit(f *File, b ast.Node, collectionName string) *ErrTypeInfo {
+
+	switch n := b.(type) {
+
+	/*
+
+	   This is here to support
+
+	   q := bson.M{
+	   	"$gte": time.Now(),
+	   	"$lte": time.Now(),
+	   }
+
+	   kind of parameters.
+	   For now, we will ignore bson.M types
+
+
+
+	   	case *ast.AssignStmt:
+	   		for _, a := range n.Rhs {
+	   			fmt.Printf("diegomm %+v\n", a)
+	   			fmt.Printf("diegomm %+v\n", reflect.TypeOf(a))
+	   			if err := checkTypeComLit(f, a, collectionName); err != nil {
+	   				return err
+	   			}
+	   		}
+
+	*/
+	case *ast.CompositeLit:
 		fmt.Println("diegommLine:   ", f.program.Fset.Position(b.Pos()))
-		for _, d := range c.Elts {
+		for _, d := range n.Elts {
 			if keyValue, ok := d.(*ast.KeyValueExpr); ok {
 				k := collectionName
 				actualType := ""
@@ -495,8 +528,9 @@ func checkTypeComLit(f *File, b ast.Expr, collectionName string) *ErrTypeInfo {
 					k = k + "." + mongoFieldNameUsedInMapQuery.Value
 					//if f.collFieldTypes[k] == "time.Time" {
 					//fmt.Printf("diegomm0 %+v\n", collectionName)
-					//fmt.Printf("diegomm1 %+v\n", keyValue.Value)
-					//fmt.Printf("diegomm2 %+v\n", reflect.TypeOf(keyValue.Value))
+					fmt.Printf("diegomm1 %+v\n", keyValue.Key)
+					fmt.Printf("diegomm2 %+v\n", reflect.TypeOf(keyValue.Key))
+					fmt.Printf("diegomm3 %+v\n", k)
 					//}
 				}
 
@@ -519,15 +553,24 @@ func checkTypeComLit(f *File, b ast.Expr, collectionName string) *ErrTypeInfo {
 					fmt.Println("diegomm 1")
 					//valule is a variable
 					if v, ok := f.lPkg.Types[mongoFieldTypeUsedInMapQuery]; ok {
+						/*
+
+							See comment about bson.M a few lines above
+								bsonMap := importType("gopkg.in/mgo.v2/bson", "M")
+								if bsonMap.String() == v.Type.String() {
+									fmt.Println("diegomm 2 type ", v.Type.String())
+									fmt.Printf("diegomm 2 Obj.Decl: %+v\n", mongoFieldTypeUsedInMapQuery.Obj.Decl)
+									fmt.Printf("diegomm 2 reflect: %+v\n", reflect.TypeOf(mongoFieldTypeUsedInMapQuery.Obj.Decl))
+									if g, ok := mongoFieldTypeUsedInMapQuery.Obj.Decl.(*ast.AssignStmt); ok {
+										if err := checkTypeComLit(f, g, collectionName); err != nil {
+											return err
+										}
+									}
+								} else {
+									actualType = v.Type.String()
+								}
+						*/
 						actualType = v.Type.String()
-						fmt.Println("diegomm 2 ", v.Type.String())
-						fmt.Printf("diegomm 2 %+v\n", mongoFieldTypeUsedInMapQuery.Obj.Decl)
-						fmt.Printf("diegomm 2 %+v\n", reflect.TypeOf(mongoFieldTypeUsedInMapQuery.Obj.Decl))
-						if a, ok := mongoFieldTypeUsedInMapQuery.Obj.Decl.(*ast.CompositeLit); ok {
-							fmt.Println("diegomm 22 ", a)
-
-						}
-
 					}
 
 				default:
@@ -536,7 +579,9 @@ func checkTypeComLit(f *File, b ast.Expr, collectionName string) *ErrTypeInfo {
 
 				expectedType := f.collFieldTypes[k]
 				pos := f.program.Fset.Position(keyValue.Value.Pos())
-				if expectedType != actualType {
+				// TODO: (Diego): don't skip this type
+				bsonMap := importType("gopkg.in/mgo.v2/bson", "M").String()
+				if expectedType != actualType && actualType != bsonMap {
 					errorFound := &ErrTypeInfo{
 						Expected: expectedType,
 						Actual:   actualType,
